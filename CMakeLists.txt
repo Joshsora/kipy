@@ -4,5 +4,6 @@ project(kipy)
 add_subdirectory(dependencies/libki)
 add_subdirectory(dependencies/pybind11)
 
-pybind11_add_module(dml src/dml.cpp)
+# DML Bindings
+pybind11_add_module(dml src/dml_bindings.cpp)
 target_link_libraries(dml PRIVATE ki)
