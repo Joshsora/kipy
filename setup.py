@@ -83,6 +83,7 @@ setup(
         'build_ext': CMakeBuild
     },
     zip_safe=False,
+    setup_requires=['pytest-runner'],
     install_requires=['pyuv>=1.4.0'],
-    tests_require=['pytest>=3.5.0']
+    tests_require=['pytest>=2.8.0']
 )

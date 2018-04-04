@@ -8,7 +8,7 @@ Prior to installing kipy, verify the following:
 
 Version Requirements
 --------------------
-* Python 3.3.0+
+* Python 3.5.0+
 * CMake 3.1.0+
 * C++11 supported compiler
 
