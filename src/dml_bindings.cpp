@@ -1,5 +1,8 @@
+#include <string>
+
 #include <pybind11/pybind11.h>
 
+#include <ki/dml/exception.h>
 #include <ki/dml/Record.h>
 #include <ki/dml/FieldBase.h>
 #include <ki/dml/Field.h>
@@ -19,21 +22,37 @@
         .def_property_readonly("size", &Field<TYPE>::get_size,                  \
             py::return_value_policy::copy)
 
-#define DEF_HAS_FIELD_METHOD(NAME, TYPE) \
-    .def(NAME, &Record::has_field<TYPE>, py::arg("name"))
-#define DEF_GET_FIELD_METHOD(NAME, TYPE) \
-    .def(NAME, &Record::get_field<TYPE>, py::arg("name"))
-#define DEF_ADD_FIELD_METHOD(NAME, TYPE) \
-    .def(NAME, &Record::add_field<TYPE>, py::arg("name"), py::arg("transferable") = false)
+#define DEF_HAS_FIELD_METHOD(NAME, TYPE)                   \
+    .def(NAME, &Record::has_field<TYPE>, py::arg("name"),  \
+        py::return_value_policy::copy)
+#define DEF_GET_FIELD_METHOD(NAME, TYPE)                   \
+    .def(NAME, &Record::get_field<TYPE>, py::arg("name"),  \
+        py::return_value_policy::reference)
+#define DEF_ADD_FIELD_METHOD(NAME, TYPE)                   \
+    .def(NAME, &Record::add_field<TYPE>, py::arg("name"),  \
+        py::arg("transferable") = false,                   \
+        py::return_value_policy::reference)
 
 using namespace ki::dml;
 namespace py = pybind11;
 
 PYBIND11_MODULE(dml, m)
 {
+    // Exceptions
+    py::register_exception<runtime_error>(m, "DMLRuntimeError");
+    py::register_exception<parse_error>(m, "DMLParseError");
+    py::register_exception<value_error>(m, "DMLValueError");
+
     // Record Class
     py::class_<Record>(m, "Record")
         .def(py::init<>())
+        // Descriptors
+        .def("__getitem__", [](const Record &self, std::string key)
+        {
+        })
+        .def("__iter__", [](const Record &self)
+        {
+        }, py::keep_alive<0, 1>())
         // Read-only Properties
         .def_property_readonly("field_count", &Record::get_field_count,
             py::return_value_policy::copy)
