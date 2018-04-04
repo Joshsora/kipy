@@ -1,4 +1,5 @@
 #include <string>
+#include <iostream>
 
 #include <pybind11/pybind11.h>
 
@@ -53,7 +54,7 @@ PYBIND11_MODULE(dml, m)
             if (field)
                 return field;
             throw py::key_error("Field '" + key + "' does not exist");
-        }, py::return_value_policy::reference)
+        }, py::arg("key"), py::return_value_policy::reference)
         .def("__iter__", [](const Record &self)
         {
             return py::make_iterator(self.fields_begin(), self.fields_end());
@@ -61,7 +62,7 @@ PYBIND11_MODULE(dml, m)
         .def("__contains__", [](const Record &self, std::string key)
         {
             return self.has_field(key);
-        })
+        }, py::arg("key"), py::return_value_policy::copy)
         // Read-only Properties
         .def_property_readonly("field_count", &Record::get_field_count,
             py::return_value_policy::copy)
@@ -103,9 +104,18 @@ PYBIND11_MODULE(dml, m)
         DEF_ADD_FIELD_METHOD("add_flt_field", FLT)
         DEF_ADD_FIELD_METHOD("add_dbl_field", DBL)
         DEF_ADD_FIELD_METHOD("add_gid_field", GID)
-        // I/O Methods
-        .def("write_to", &Record::write_to, py::arg("ostream"))
-        .def("read_from", &Record::read_from, py::arg("istream"));
+        // Extensions
+        .def("to_bytes", [](const Record &self)
+        {
+            std::ostringstream oss;
+            self.write_to(oss);
+            return py::bytes(oss.str());
+        }, py::return_value_policy::copy)
+        .def("from_bytes", [](Record &self, std::string data)
+        {
+            std::istringstream iss(data);
+            self.read_from(iss);
+        }, py::arg("data"));
 
     // Field Classes
     DEF_FIELD_CLASS("BytField", BYT);
