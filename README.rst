@@ -4,22 +4,24 @@ kipy: Python bindings and extensions for libki
 =============
 Prerequisites
 =============
-Prior to installing kipy, make sure you do the following:
+Prior to installing kipy, verify the following:
 
-Initialize the dependency submodules:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    git submodule update --init --recursive
-
-Install the following requirements:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Version Requirements
+--------------------
+* Python 3.3.0+
 * CMake 3.1.0+
-* Python 3.3+
-* A C++ compiler that supports C++11
+* C++11 supported compiler
+
+Initialize Submodules
+---------------------
+To initialize the dependency submodules, simply run the following:
+::
+    git submodule update --init --recursive
 
 ==========
 Installing
 ==========
-To install kipy in your Python environment, simply run the following
+To install kipy in your Python environment, simply run the following:
 ::
     python setup.py install
 
