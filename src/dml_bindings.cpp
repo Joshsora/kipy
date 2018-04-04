@@ -60,7 +60,7 @@ PYBIND11_MODULE(dml, m)
         }, py::keep_alive<0, 1>())
         .def("__contains__", [](const Record &self, std::string key)
         {
-            return self.get_field(key) != nullptr;
+            return self.has_field(key);
         })
         // Read-only Properties
         .def_property_readonly("field_count", &Record::get_field_count,
