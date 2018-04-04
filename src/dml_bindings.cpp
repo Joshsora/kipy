@@ -30,7 +30,7 @@
         py::return_value_policy::reference)
 #define DEF_ADD_FIELD_METHOD(NAME, TYPE)                   \
     .def(NAME, &Record::add_field<TYPE>, py::arg("name"),  \
-        py::arg("transferable") = false,                   \
+        py::arg("transferable") = true,                    \
         py::return_value_policy::reference)
 
 using namespace ki::dml;
@@ -49,10 +49,19 @@ PYBIND11_MODULE(dml, m)
         // Descriptors
         .def("__getitem__", [](const Record &self, std::string key)
         {
-        })
+            auto *field = self.get_field(key);
+            if (field)
+                return field;
+            throw py::key_error("Field '" + key + "' does not exist");
+        }, py::return_value_policy::reference)
         .def("__iter__", [](const Record &self)
         {
+            return py::make_iterator(self.fields_begin(), self.fields_end());
         }, py::keep_alive<0, 1>())
+        .def("__contains__", [](const Record &self, std::string key)
+        {
+            return self.get_field(key) != nullptr;
+        })
         // Read-only Properties
         .def_property_readonly("field_count", &Record::get_field_count,
             py::return_value_policy::copy)
