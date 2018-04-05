@@ -26,6 +26,13 @@ To install kipy in your Python environment, simply run the following:
     python setup.py install
 
 =======
+Testing
+=======
+Similarly, run this if you wish to run kipy's unit tests:
+::
+    python setup.py test
+
+=======
 Authors
 =======
 * `Joshua Scott <https://github.com/Joshsora/>`_
