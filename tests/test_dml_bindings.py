@@ -199,17 +199,15 @@ def test_wstr_deserialization(record):
 
 
 def test_flt_deserialization(record):
-    import math
     field = record.add_flt_field('TestFlt')
     record.from_bytes(b'\x66\x66\x18\x43')
-    assert math.isclose(field.value, 152.4, rel_tol=1e-07)
+    assert field.value == pytest.approx(152.4)
 
 
 def test_dbl_deserialization(record):
-    import math
     field = record.add_dbl_field('TestDbl')
     record.from_bytes(b'\xCD\xCC\xCC\xCC\xCC\x0C\x63\x40')
-    assert math.isclose(field.value, 152.4, rel_tol=1e-07)
+    assert field.value == pytest.approx(152.4)
 
 
 def test_gid_deserialization(record):
@@ -251,8 +249,6 @@ def test_record_serialization(record):
 
 
 def test_record_deserialization(record):
-    import math
-
     byt_field = record.add_byt_field('TestByt')
     ubyt_field = record.add_ubyt_field('TestUByt')
     shrt_field = record.add_shrt_field('TestShrt')
@@ -277,7 +273,7 @@ def test_record_deserialization(record):
     assert uint_field.value == 4294967295
     assert str_field.value == 'TEST'
     assert wstr_field.value == 'TEST'
-    assert math.isclose(flt_field.value, 152.4, rel_tol=1e-07)
-    assert math.isclose(dbl_field.value, 152.4, rel_tol=1e-07)
+    assert flt_field.value == pytest.approx(152.4)
+    assert dbl_field.value == pytest.approx(152.4)
     assert gid_field.value == 0x8899AABBCCDDEEFF
     assert noxfer_field.value == 0x0
