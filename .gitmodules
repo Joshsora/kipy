@@ -1,6 +1,7 @@
 [submodule "dependencies/libki"]
 	path = dependencies/libki
 	url = git@github.com:Joshsora/libki.git
+	branch = messaging
 [submodule "dependencies/pybind11"]
 	path = dependencies/pybind11
 	url = git@github.com:pybind/pybind11.git

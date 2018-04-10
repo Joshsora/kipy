@@ -78,7 +78,10 @@ setup(
     description=about['__description__'],
     long_description=long_description,
     packages=find_packages(),
-    ext_modules=[CMakeExtension('ki.dml')],
+    ext_modules=[
+        CMakeExtension('ki.dml'),
+        CMakeExtension('ki.protocol')
+    ],
     cmdclass={
         'build_ext': CMakeBuild
     },

@@ -11,34 +11,46 @@
 #define DEF_FIELD_CLASS(NAME, TYPE)                                             \
     py::class_<Field<TYPE>>(m, NAME)                                            \
         .def(py::init<std::string>())                                           \
-        .def_property_readonly("name", &Field<TYPE>::get_name,                  \
+        .def_property_readonly("name",                                          \
+            &Field<TYPE>::get_name,                                             \
             py::return_value_policy::copy)                                      \
-        .def_property_readonly("transferable", &Field<TYPE>::is_transferable,   \
+        .def_property_readonly("transferable",                                  \
+            &Field<TYPE>::is_transferable,                                      \
             py::return_value_policy::copy)                                      \
-        .def_property("value", &Field<TYPE>::get_value,                         \
+        .def_property("value",                                                  \
+            &Field<TYPE>::get_value,                                            \
             static_cast<void (Field<TYPE>::*)(TYPE)>(&Field<TYPE>::set_value),  \
             py::return_value_policy::copy)                                      \
-        .def_property_readonly("type_name", &Field<TYPE>::get_type_name,        \
+        .def_property_readonly("type_name",                                     \
+            &Field<TYPE>::get_type_name,                                        \
             py::return_value_policy::copy)                                      \
-        .def_property_readonly("size", &Field<TYPE>::get_size,                  \
+        .def_property_readonly("size",                                          \
+            &Field<TYPE>::get_size,                                             \
             py::return_value_policy::copy)
 
-#define DEF_HAS_FIELD_METHOD(NAME, TYPE)                   \
-    .def(NAME, &Record::has_field<TYPE>, py::arg("name"),  \
+#define DEF_HAS_FIELD_METHOD(NAME, TYPE)            \
+    .def(NAME,                                      \
+        &Record::has_field<TYPE>,                   \
+        py::arg("name"),                            \
         py::return_value_policy::copy)
-#define DEF_GET_FIELD_METHOD(NAME, TYPE)                   \
-    .def(NAME, &Record::get_field<TYPE>, py::arg("name"),  \
+#define DEF_GET_FIELD_METHOD(NAME, TYPE)     \
+    .def(NAME,                               \
+        &Record::get_field<TYPE>,            \
+        py::arg("name"),                     \
         py::return_value_policy::reference)
-#define DEF_ADD_FIELD_METHOD(NAME, TYPE)                   \
-    .def(NAME, &Record::add_field<TYPE>, py::arg("name"),  \
-        py::arg("transferable") = true,                    \
+#define DEF_ADD_FIELD_METHOD(NAME, TYPE)     \
+    .def(NAME,                               \
+        &Record::add_field<TYPE>,            \
+        py::arg("name"),                     \
+        py::arg("transferable") = true,      \
         py::return_value_policy::reference)
 
-using namespace ki::dml;
 namespace py = pybind11;
 
 PYBIND11_MODULE(dml, m)
 {
+    using namespace ki::dml;
+
     // Exceptions
     py::register_exception<runtime_error>(m, "DMLRuntimeError");
     py::register_exception<parse_error>(m, "DMLParseError");
@@ -48,25 +60,35 @@ PYBIND11_MODULE(dml, m)
     py::class_<Record>(m, "Record")
         .def(py::init<>())
         // Descriptors
-        .def("__getitem__", [](const Record &self, std::string key)
-        {
-            auto *field = self.get_field(key);
-            if (field)
-                return field;
-            throw py::key_error("Field '" + key + "' does not exist");
-        }, py::arg("key"), py::return_value_policy::reference)
-        .def("__iter__", [](const Record &self)
-        {
-            return py::make_iterator(self.fields_begin(), self.fields_end());
-        }, py::keep_alive<0, 1>())
-        .def("__contains__", [](const Record &self, std::string key)
-        {
-            return self.has_field(key);
-        }, py::arg("key"), py::return_value_policy::copy)
-        // Read-only Properties
-        .def_property_readonly("field_count", &Record::get_field_count,
+        .def("__getitem__",
+            [](const Record &self, std::string key)
+            {
+                auto *field = self.get_field(key);
+                if (field)
+                    return field;
+                throw py::key_error("Field '" + key + "' does not exist");
+            },
+            py::arg("key"),
+            py::return_value_policy::reference)
+        .def("__iter__",
+            [](const Record &self)
+            {
+                return py::make_iterator(self.fields_begin(), self.fields_end());
+            },
+            py::keep_alive<0, 1>())
+        .def("__contains__",
+            [](const Record &self, std::string key)
+            {
+                return self.has_field(key);
+            },
+            py::arg("key"),
             py::return_value_policy::copy)
-        .def_property_readonly("size", &Record::get_size,
+        // Read-only Properties
+        .def_property_readonly("field_count",
+            &Record::get_field_count,
+            py::return_value_policy::copy)
+        .def_property_readonly("size",
+            &Record::get_size,
             py::return_value_policy::copy)
         // Has (Field)
         DEF_HAS_FIELD_METHOD("has_byt_field", BYT)
@@ -105,17 +127,21 @@ PYBIND11_MODULE(dml, m)
         DEF_ADD_FIELD_METHOD("add_dbl_field", DBL)
         DEF_ADD_FIELD_METHOD("add_gid_field", GID)
         // Extensions
-        .def("to_bytes", [](const Record &self)
-        {
-            std::ostringstream oss;
-            self.write_to(oss);
-            return py::bytes(oss.str());
-        }, py::return_value_policy::copy)
-        .def("from_bytes", [](Record &self, std::string data)
-        {
-            std::istringstream iss(data);
-            self.read_from(iss);
-        }, py::arg("data"));
+        .def("to_bytes",
+            [](const Record &self)
+            {
+                std::ostringstream oss;
+                self.write_to(oss);
+                return py::bytes(oss.str());
+            },
+            py::return_value_policy::copy)
+        .def("from_bytes",
+            [](Record &self, std::string data)
+            {
+                std::istringstream iss(data);
+                self.read_from(iss);
+            },
+            py::arg("data"));
 
     // Field Classes
     DEF_FIELD_CLASS("BytField", BYT);
