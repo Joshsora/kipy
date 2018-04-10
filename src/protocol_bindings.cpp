@@ -11,6 +11,13 @@
 #include <ki/protocol/dml/MessageTemplate.h>
 #include <ki/protocol/dml/MessageModule.h>
 #include <ki/protocol/dml/MessageManager.h>
+#include <ki/protocol/net/PacketHeader.h>
+#include <ki/protocol/net/Participant.h>
+#include <ki/protocol/net/Session.h>
+#include <ki/protocol/control/Opcode.h>
+#include <ki/protocol/control/ServerHello.h>
+#include <ki/protocol/control/Ping.h>
+#include <ki/protocol/control/ClientHello.h>
 
 #define DEF_SET_FIELD_VALUE_METHOD(NAME, TYPE)    \
     .def(NAME,                                    \
@@ -20,6 +27,55 @@
         py::return_value_policy::take_ownership)
 
 namespace py = pybind11;
+
+class TrampolineParticipant : public ki::protocol::net::Participant
+{
+public:
+    using ki::protocol::net::Participant::Participant;
+    void send_packet_data(const char *data, const size_t size) override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void,
+            ki::protocol::net::Participant,
+            send_packet_data,
+            data, size);
+    }
+    void close() override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void,
+            ki::protocol::net::Participant,
+            close, );
+    }
+};
+
+class TrampolineSession : public ki::protocol::net::Session
+{
+public:
+    using ki::protocol::net::Session::Session;
+    void send_packet_data(const char *data, const size_t size) override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void,
+            ki::protocol::net::Session,
+            send_packet_data,
+            data, size);
+    }
+    void close() override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void,
+            ki::protocol::net::Session,
+            close, );
+    }
+};
+
+class PublicistParticipant : public ki::protocol::net::Participant
+{
+public:
+    using ki::protocol::net::Participant::send_packet_data;
+    using ki::protocol::net::Participant::close;
+};
 
 PYBIND11_MODULE(protocol, m)
 {
@@ -255,4 +311,233 @@ PYBIND11_MODULE(protocol, m)
                 return self.message_from_binary(iss);
             },
             py::arg("data"));
+
+    // dml Submodule (end)
+
+    using namespace ki::protocol::net;
+
+    // net Submodule
+    py::module m_net = m.def_submodule("net");
+
+    // PacketHeader Class
+    py::class_<PacketHeader>(m_net, "PacketHeader")
+        .def(py::init<bool, uint8_t>(),
+            py::arg("control") = false,
+            py::arg("opcode") = 0)
+        // Properties
+        .def_property("control",
+            &PacketHeader::is_control,
+            &PacketHeader::set_control,
+            py::return_value_policy::copy)
+        .def_property("opcode",
+            &PacketHeader::get_opcode,
+            &PacketHeader::set_opcode,
+            py::return_value_policy::copy)
+        // Read-only Properties
+        .def_property_readonly("size",
+            &PacketHeader::get_size,
+            py::return_value_policy::copy)
+        // Extensions
+        .def("to_bytes",
+            [](const PacketHeader &self)
+            {
+                std::ostringstream oss;
+                self.write_to(oss);
+                return py::bytes(oss.str());
+            },
+            py::return_value_policy::copy)
+        .def("from_bytes",
+            [](PacketHeader &self, std::string data)
+            {
+                std::istringstream iss(data);
+                self.read_from(iss);
+            },
+            py::arg("data"));
+
+    // ReceiveState Enum
+    py::enum_<ReceiveState>(m_net, "ReceiveState")
+        .value("WAITING_FOR_START_SIGNAL", ReceiveState::WAITING_FOR_START_SIGNAL)
+        .value("WAITING_FOR_LENGTH", ReceiveState::WAITING_FOR_LENGTH)
+        .value("WAITING_FOR_PACKET", ReceiveState::WAITING_FOR_PACKET);
+
+    // ParticipantType Enum
+    py::enum_<ParticipantType>(m_net, "ParticipantType")
+        .value("SERVER", ParticipantType::SERVER)
+        .value("CLIENT", ParticipantType::CLIENT);
+
+    // Participant Class
+    py::class_<Participant, TrampolineParticipant> participant(m_net, "Participant");
+    participant.def(py::init<ParticipantType>(), py::arg("type"))
+        // Properties
+        .def_property("type",
+            &Participant::get_type,
+            &Participant::set_type,
+            py::return_value_policy::copy)
+        .def_property("maximum_packet_size",
+            &Participant::get_maximum_packet_size,
+            &Participant::set_maximum_packet_size,
+            py::return_value_policy::copy)
+        // Virtual Methods
+        .def("send_packet_data", &PublicistParticipant::send_packet_data)
+        .def("close", &PublicistParticipant::close);
+
+    // Session Class
+    py::class_<Session, TrampolineSession>(m_net, "Session", participant)
+        .def(py::init<ParticipantType, uint16_t>(),
+            py::arg("type"), py::arg("id"))
+        // Properties
+        .def_property("access_level",
+            &Session::get_access_level,
+            &Session::set_access_level,
+            py::return_value_policy::copy)
+        // Read-only Properties
+        .def_property_readonly("id",
+            &Session::get_id,
+            py::return_value_policy::copy)
+        .def_property_readonly("established",
+            &Session::is_established,
+            py::return_value_policy::copy)
+        .def_property_readonly("latency",
+            &Session::get_latency,
+            py::return_value_policy::copy)
+        .def_property_readonly("alive",
+            &Session::is_alive,
+            py::return_value_policy::copy);
+
+    // net Submodule (end)
+
+    using namespace ki::protocol::control;
+
+    // control Submodule
+    py::module m_control = m.def_submodule("control");
+
+    // Opcode Enum
+    py::enum_<Opcode>(m_control, "Opcode")
+        .value("SERVER_HELLO", Opcode::SERVER_HELLO)
+        .value("UDP_HELLO", Opcode::UDP_HELLO)
+        .value("PING", Opcode::PING)
+        .value("PING_RSP", Opcode::PING_RSP)
+        .value("CLIENT_HELLO", Opcode::CLIENT_HELLO);
+
+    // ServerHello Class
+    py::class_<ServerHello>(m_control, "ServerHello")
+        .def(py::init<uint16_t, int32_t, uint32_t>(),
+            py::arg("session_id") = 0,
+            py::arg("timestamp") = 0,
+            py::arg("milliseconds") = 0)
+        // Properties
+        .def_property("session_id",
+            &ServerHello::get_session_id,
+            &ServerHello::set_session_id,
+            py::return_value_policy::copy)
+        .def_property("timestamp",
+            &ServerHello::get_timestamp,
+            &ServerHello::set_timestamp,
+            py::return_value_policy::copy)
+        .def_property("milliseconds",
+            &ServerHello::get_milliseconds,
+            &ServerHello::set_milliseconds,
+            py::return_value_policy::copy)
+        // Read-only Properties
+        .def_property_readonly("size",
+            &ServerHello::get_size,
+            py::return_value_policy::copy)
+        // Extensions
+        .def("to_bytes",
+            [](const ServerHello &self)
+            {
+                std::ostringstream oss;
+                self.write_to(oss);
+                return py::bytes(oss.str());
+            },
+            py::return_value_policy::copy)
+        .def("from_bytes",
+            [](ServerHello &self, std::string data)
+            {
+                std::istringstream iss(data);
+                self.read_from(iss);
+            },
+            py::arg("data"));
+
+    // Ping Class
+    py::class_<Ping>(m_control, "Ping")
+        .def(py::init<uint16_t, uint16_t, uint8_t>(),
+            py::arg("session_id") = 0,
+            py::arg("milliseconds") = 0,
+            py::arg("minutes") = 0)
+        // Properties
+        .def_property("session_id",
+            &Ping::get_session_id,
+            &Ping::set_session_id,
+            py::return_value_policy::copy)
+        .def_property("milliseconds",
+            &Ping::get_milliseconds,
+            &Ping::set_milliseconds,
+            py::return_value_policy::copy)
+        .def_property("minutes",
+            &Ping::get_minutes,
+            &Ping::set_minutes,
+            py::return_value_policy::copy)
+        // Read-only Properties
+        .def_property_readonly("size",
+            &Ping::get_size,
+            py::return_value_policy::copy)
+        // Extensions
+        .def("to_bytes",
+            [](const Ping &self)
+            {
+                std::ostringstream oss;
+                self.write_to(oss);
+                return py::bytes(oss.str());
+            },
+            py::return_value_policy::copy)
+        .def("from_bytes",
+            [](Ping &self, std::string data)
+            {
+                std::istringstream iss(data);
+                self.read_from(iss);
+            },
+            py::arg("data"));
+
+    // ClientHello Class
+    py::class_<ClientHello>(m_control, "ClientHello")
+        .def(py::init<uint16_t, int32_t, uint32_t>(),
+            py::arg("session_id") = 0,
+            py::arg("timestamp") = 0,
+            py::arg("milliseconds") = 0)
+        // Properties
+        .def_property("session_id",
+            &ClientHello::get_session_id,
+            &ClientHello::set_session_id,
+            py::return_value_policy::copy)
+        .def_property("timestamp",
+            &ClientHello::get_timestamp,
+            &ClientHello::set_timestamp,
+            py::return_value_policy::copy)
+        .def_property("milliseconds",
+            &ClientHello::get_milliseconds,
+            &ClientHello::set_milliseconds,
+            py::return_value_policy::copy)
+        // Read-only Properties
+        .def_property_readonly("size",
+            &ClientHello::get_size,
+            py::return_value_policy::copy)
+        // Extensions
+        .def("to_bytes",
+            [](const ClientHello &self)
+            {
+                std::ostringstream oss;
+                self.write_to(oss);
+                return py::bytes(oss.str());
+            },
+            py::return_value_policy::copy)
+        .def("from_bytes",
+            [](ClientHello &self, std::string data)
+            {
+                std::istringstream iss(data);
+                self.read_from(iss);
+            },
+            py::arg("data"));
+
+    // control Submodule (end)
 }
