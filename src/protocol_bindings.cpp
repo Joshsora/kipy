@@ -14,6 +14,7 @@
 #include <ki/protocol/net/PacketHeader.h>
 #include <ki/protocol/net/Participant.h>
 #include <ki/protocol/net/Session.h>
+#include <ki/protocol/net/DMLSession.h>
 #include <ki/protocol/control/Opcode.h>
 #include <ki/protocol/control/ServerHello.h>
 #include <ki/protocol/control/Ping.h>
@@ -26,55 +27,98 @@
         py::arg("value"),                         \
         py::return_value_policy::take_ownership)
 
+#define DEF_TO_BYTES_EXTENSION(SELF)      \
+    .def("to_bytes",                      \
+        [](const SELF &self)              \
+        {                                 \
+            std::ostringstream oss;       \
+            self.write_to(oss);           \
+            return py::bytes(oss.str());  \
+        },                                \
+        py::return_value_policy::copy)
+#define DEF_FROM_BYTES_EXTENSION(SELF)     \
+    .def("from_bytes",                     \
+        [](SELF &self, std::string data)   \
+        {                                  \
+            std::istringstream iss(data);  \
+            self.read_from(iss);           \
+        },                                 \
+        py::arg("data"))
+
 namespace py = pybind11;
 
-class TrampolineParticipant : public ki::protocol::net::Participant
+template <class ParticipantBase = ki::protocol::net::Participant>
+class ParticipantTrampoline : public ParticipantBase
 {
 public:
-    using ki::protocol::net::Participant::Participant;
+    using ParticipantBase::ParticipantBase;
     void send_packet_data(const char *data, const size_t size) override
     {
-        PYBIND11_OVERLOAD_PURE(
-            void,
-            ki::protocol::net::Participant,
-            send_packet_data,
-            data, size);
+        PYBIND11_OVERLOAD_PURE(void, ParticipantBase, send_packet_data, data, size);
     }
     void close() override
     {
-        PYBIND11_OVERLOAD_PURE(
-            void,
-            ki::protocol::net::Participant,
-            close, );
+        PYBIND11_OVERLOAD_PURE(void, ParticipantBase, close, );
     }
 };
 
-class TrampolineSession : public ki::protocol::net::Session
+template <class SessionBase = ki::protocol::net::Session>
+class SessionTrampoline : public ParticipantTrampoline<SessionBase>
 {
 public:
-    using ki::protocol::net::Session::Session;
-    void send_packet_data(const char *data, const size_t size) override
+    using ParticipantTrampoline<SessionBase>::ParticipantTrampoline;
+    void on_established() override
     {
-        PYBIND11_OVERLOAD_PURE(
-            void,
-            ki::protocol::net::Session,
-            send_packet_data,
-            data, size);
+        PYBIND11_OVERLOAD(void, SessionBase, on_established, );
     }
-    void close() override
+    void on_application_message(const ki::protocol::net::PacketHeader &header) override
     {
-        PYBIND11_OVERLOAD_PURE(
-            void,
-            ki::protocol::net::Session,
-            close, );
+        PYBIND11_OVERLOAD(void, SessionBase, on_application_message, header);
+    }
+    void on_invalid_packet() override
+    {
+        PYBIND11_OVERLOAD(void, SessionBase, on_invalid_packet, );
     }
 };
 
-class PublicistParticipant : public ki::protocol::net::Participant
+template <class DMLSessionBase = ki::protocol::net::DMLSession>
+class DMLSessionTrampoline : public SessionTrampoline<DMLSessionBase>
 {
 public:
+    using SessionTrampoline<DMLSessionBase>::SessionTrampoline;
+    void on_message(const ki::protocol::dml::Message &message) override
+    {
+        PYBIND11_OVERLOAD(void, DMLSessionBase, on_message, message);
+    }
+    void on_invalid_message() override
+    {
+        PYBIND11_OVERLOAD(void, DMLSessionBase, on_invalid_message, );
+    }
+};
+
+class ParticipantPublicist : public ki::protocol::net::Participant
+{
+public:
+    using ki::protocol::net::Participant::process_data;
     using ki::protocol::net::Participant::send_packet_data;
+    using ki::protocol::net::Participant::on_packet_available;
     using ki::protocol::net::Participant::close;
+};
+
+class SessionPublicist : public ki::protocol::net::Session
+{
+public:
+    using ki::protocol::net::Session::on_connected;
+    using ki::protocol::net::Session::on_established;
+    using ki::protocol::net::Session::on_application_message;
+    using ki::protocol::net::Session::on_invalid_packet;
+};
+
+class DMLSessionPublicist : public ki::protocol::net::DMLSession
+{
+public:
+    using ki::protocol::net::DMLSession::on_message;
+    using ki::protocol::net::DMLSession::on_invalid_message;
 };
 
 PYBIND11_MODULE(protocol, m)
@@ -118,21 +162,8 @@ PYBIND11_MODULE(protocol, m)
             &Message::use_template_record,
             py::arg("record"))
         // Extensions
-        .def("to_bytes",
-            [](const Message &self)
-            {
-                std::ostringstream oss;
-                self.write_to(oss);
-                return py::bytes(oss.str());
-            },
-            py::return_value_policy::copy)
-        .def("from_bytes",
-            [](Message &self, std::string data)
-            {
-                std::istringstream iss(data);
-                self.read_from(iss);
-            },
-            py::arg("data"));
+        DEF_TO_BYTES_EXTENSION(Message)
+        DEF_FROM_BYTES_EXTENSION(Message);
 
     // MessageBuilder Class
     py::class_<MessageBuilder>(m_dml, "MessageBuilder")
@@ -156,7 +187,7 @@ PYBIND11_MODULE(protocol, m)
             &MessageBuilder::use_template_record,
             py::arg("record"),
             py::return_value_policy::take_ownership)
-        // set_field_value Methods
+        // set_field_value
         DEF_SET_FIELD_VALUE_METHOD("set_byt_field_value", ki::dml::BYT)
         DEF_SET_FIELD_VALUE_METHOD("set_ubyt_field_value", ki::dml::UBYT)
         DEF_SET_FIELD_VALUE_METHOD("set_shrt_field_value", ki::dml::SHRT)
@@ -338,21 +369,8 @@ PYBIND11_MODULE(protocol, m)
             &PacketHeader::get_size,
             py::return_value_policy::copy)
         // Extensions
-        .def("to_bytes",
-            [](const PacketHeader &self)
-            {
-                std::ostringstream oss;
-                self.write_to(oss);
-                return py::bytes(oss.str());
-            },
-            py::return_value_policy::copy)
-        .def("from_bytes",
-            [](PacketHeader &self, std::string data)
-            {
-                std::istringstream iss(data);
-                self.read_from(iss);
-            },
-            py::arg("data"));
+        DEF_TO_BYTES_EXTENSION(PacketHeader)
+        DEF_FROM_BYTES_EXTENSION(PacketHeader);
 
     // ReceiveState Enum
     py::enum_<ReceiveState>(m_net, "ReceiveState")
@@ -366,7 +384,7 @@ PYBIND11_MODULE(protocol, m)
         .value("CLIENT", ParticipantType::CLIENT);
 
     // Participant Class
-    py::class_<Participant, TrampolineParticipant> participant(m_net, "Participant");
+    py::class_<Participant, ParticipantTrampoline<>> participant(m_net, "Participant");
     participant.def(py::init<ParticipantType>(), py::arg("type"))
         // Properties
         .def_property("type",
@@ -377,14 +395,21 @@ PYBIND11_MODULE(protocol, m)
             &Participant::get_maximum_packet_size,
             &Participant::set_maximum_packet_size,
             py::return_value_policy::copy)
+        // Protected Methods
+        .def("process_data",
+            &ParticipantPublicist::process_data,
+            py::arg("data"), py::arg("size"))
         // Virtual Methods
-        .def("send_packet_data", &PublicistParticipant::send_packet_data)
-        .def("close", &PublicistParticipant::close);
+        .def("send_packet_data",
+            &ParticipantPublicist::send_packet_data,
+            py::arg("data"), py::arg("size"))
+        .def("on_packet_available", &ParticipantPublicist::on_packet_available)
+        .def("close", &ParticipantPublicist::close);
 
     // Session Class
-    py::class_<Session, TrampolineSession>(m_net, "Session", participant)
-        .def(py::init<ParticipantType, uint16_t>(),
-            py::arg("type"), py::arg("id"))
+    py::class_<Session, SessionTrampoline<>> session(m_net, "Session", participant);
+    session.def(py::init<ParticipantType, uint16_t>(),
+        py::arg("type"), py::arg("id"))
         // Properties
         .def_property("access_level",
             &Session::get_access_level,
@@ -402,7 +427,30 @@ PYBIND11_MODULE(protocol, m)
             py::return_value_policy::copy)
         .def_property_readonly("alive",
             &Session::is_alive,
-            py::return_value_policy::copy);
+            py::return_value_policy::copy)
+        // Methods
+        .def("send_packet",
+            &Session::send_packet,
+            py::arg("is_control"), py::arg("opcode"),
+            py::arg("data"))
+        // Protected Methods
+        .def("on_connected", &SessionPublicist::on_connected)
+        // Virtual Methods
+        .def("on_established", &SessionPublicist::on_established)
+        .def("on_application_message",
+            &SessionPublicist::on_application_message,
+            py::arg("header"))
+        .def("on_invalid_packet", &SessionPublicist::on_invalid_packet);
+
+    // DMLSession Class
+    py::class_<DMLSession, DMLSessionTrampoline<>> dml_session(m_net, "DMLSession", session);
+    dml_session.def(py::init<ParticipantType, uint16_t, const ki::protocol::dml::MessageManager &>(),
+            py::arg("type"), py::arg("id"), py::arg("manager"))
+        // Methods
+        .def("send_message", &DMLSession::send_message, py::arg("message"))
+        // Virtual Methods
+        .def("on_message", &DMLSessionPublicist::on_message, py::arg("message"))
+        .def("on_invalid_message", &DMLSessionPublicist::on_invalid_message);
 
     // net Submodule (end)
 
@@ -443,21 +491,8 @@ PYBIND11_MODULE(protocol, m)
             &ServerHello::get_size,
             py::return_value_policy::copy)
         // Extensions
-        .def("to_bytes",
-            [](const ServerHello &self)
-            {
-                std::ostringstream oss;
-                self.write_to(oss);
-                return py::bytes(oss.str());
-            },
-            py::return_value_policy::copy)
-        .def("from_bytes",
-            [](ServerHello &self, std::string data)
-            {
-                std::istringstream iss(data);
-                self.read_from(iss);
-            },
-            py::arg("data"));
+        DEF_TO_BYTES_EXTENSION(ServerHello)
+        DEF_FROM_BYTES_EXTENSION(ServerHello);
 
     // Ping Class
     py::class_<Ping>(m_control, "Ping")
@@ -483,21 +518,8 @@ PYBIND11_MODULE(protocol, m)
             &Ping::get_size,
             py::return_value_policy::copy)
         // Extensions
-        .def("to_bytes",
-            [](const Ping &self)
-            {
-                std::ostringstream oss;
-                self.write_to(oss);
-                return py::bytes(oss.str());
-            },
-            py::return_value_policy::copy)
-        .def("from_bytes",
-            [](Ping &self, std::string data)
-            {
-                std::istringstream iss(data);
-                self.read_from(iss);
-            },
-            py::arg("data"));
+        DEF_TO_BYTES_EXTENSION(Ping)
+        DEF_FROM_BYTES_EXTENSION(Ping);
 
     // ClientHello Class
     py::class_<ClientHello>(m_control, "ClientHello")
@@ -523,21 +545,8 @@ PYBIND11_MODULE(protocol, m)
             &ClientHello::get_size,
             py::return_value_policy::copy)
         // Extensions
-        .def("to_bytes",
-            [](const ClientHello &self)
-            {
-                std::ostringstream oss;
-                self.write_to(oss);
-                return py::bytes(oss.str());
-            },
-            py::return_value_policy::copy)
-        .def("from_bytes",
-            [](ClientHello &self, std::string data)
-            {
-                std::istringstream iss(data);
-                self.read_from(iss);
-            },
-            py::arg("data"));
+        DEF_TO_BYTES_EXTENSION(ClientHello)
+        DEF_FROM_BYTES_EXTENSION(ClientHello);
 
     // control Submodule (end)
 }

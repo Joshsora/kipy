@@ -45,6 +45,24 @@
         py::arg("transferable") = true,      \
         py::return_value_policy::reference)
 
+#define DEF_TO_BYTES_EXTENSION(SELF)      \
+    .def("to_bytes",                      \
+        [](const SELF &self)              \
+        {                                 \
+            std::ostringstream oss;       \
+            self.write_to(oss);           \
+            return py::bytes(oss.str());  \
+        },                                \
+        py::return_value_policy::copy)
+#define DEF_FROM_BYTES_EXTENSION(SELF)     \
+    .def("from_bytes",                     \
+        [](SELF &self, std::string data)   \
+        {                                  \
+            std::istringstream iss(data);  \
+            self.read_from(iss);           \
+        },                                 \
+        py::arg("data"))
+
 namespace py = pybind11;
 
 PYBIND11_MODULE(dml, m)
@@ -90,7 +108,8 @@ PYBIND11_MODULE(dml, m)
         .def_property_readonly("size",
             &Record::get_size,
             py::return_value_policy::copy)
-        // Has (Field)
+        // Methods
+        // has_field
         DEF_HAS_FIELD_METHOD("has_byt_field", BYT)
         DEF_HAS_FIELD_METHOD("has_ubyt_field", UBYT)
         DEF_HAS_FIELD_METHOD("has_shrt_field", SHRT)
@@ -102,7 +121,7 @@ PYBIND11_MODULE(dml, m)
         DEF_HAS_FIELD_METHOD("has_flt_field", FLT)
         DEF_HAS_FIELD_METHOD("has_dbl_field", DBL)
         DEF_HAS_FIELD_METHOD("has_gid_field", GID)
-        // Get (Field)
+        // get_field
         DEF_GET_FIELD_METHOD("get_byt_field", BYT)
         DEF_GET_FIELD_METHOD("get_ubyt_field", UBYT)
         DEF_GET_FIELD_METHOD("get_shrt_field", SHRT)
@@ -114,7 +133,7 @@ PYBIND11_MODULE(dml, m)
         DEF_GET_FIELD_METHOD("get_flt_field", FLT)
         DEF_GET_FIELD_METHOD("get_dbl_field", DBL)
         DEF_GET_FIELD_METHOD("get_gid_field", GID)
-        // Add (Field)
+        // add_field
         DEF_ADD_FIELD_METHOD("add_byt_field", BYT)
         DEF_ADD_FIELD_METHOD("add_ubyt_field", UBYT)
         DEF_ADD_FIELD_METHOD("add_shrt_field", SHRT)
@@ -127,21 +146,8 @@ PYBIND11_MODULE(dml, m)
         DEF_ADD_FIELD_METHOD("add_dbl_field", DBL)
         DEF_ADD_FIELD_METHOD("add_gid_field", GID)
         // Extensions
-        .def("to_bytes",
-            [](const Record &self)
-            {
-                std::ostringstream oss;
-                self.write_to(oss);
-                return py::bytes(oss.str());
-            },
-            py::return_value_policy::copy)
-        .def("from_bytes",
-            [](Record &self, std::string data)
-            {
-                std::istringstream iss(data);
-                self.read_from(iss);
-            },
-            py::arg("data"));
+        DEF_TO_BYTES_EXTENSION(Record)
+        DEF_FROM_BYTES_EXTENSION(Record);
 
     // Field Classes
     DEF_FIELD_CLASS("BytField", BYT);
