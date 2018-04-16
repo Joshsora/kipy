@@ -12,13 +12,17 @@
 #include <ki/protocol/dml/MessageModule.h>
 #include <ki/protocol/dml/MessageManager.h>
 #include <ki/protocol/net/PacketHeader.h>
-#include <ki/protocol/net/Participant.h>
 #include <ki/protocol/net/Session.h>
+#include <ki/protocol/net/ServerSession.h>
+#include <ki/protocol/net/ClientSession.h>
 #include <ki/protocol/net/DMLSession.h>
+#include <ki/protocol/net/ServerDMLSession.h>
+#include <ki/protocol/net/ClientDMLSession.h>
 #include <ki/protocol/control/Opcode.h>
-#include <ki/protocol/control/ServerHello.h>
-#include <ki/protocol/control/Ping.h>
-#include <ki/protocol/control/ClientHello.h>
+#include <ki/protocol/control/SessionOffer.h>
+#include <ki/protocol/control/ServerKeepAlive.h>
+#include <ki/protocol/control/ClientKeepAlive.h>
+#include <ki/protocol/control/SessionAccept.h>
 
 #define DEF_SET_FIELD_VALUE_METHOD(NAME, TYPE)    \
     .def(NAME,                                    \
@@ -47,74 +51,260 @@
 
 namespace py = pybind11;
 
-template <class ParticipantBase = ki::protocol::net::Participant>
-class ParticipantTrampoline : public ParticipantBase
+class PySession : public ki::protocol::net::Session
 {
 public:
-    using ParticipantBase::ParticipantBase;
-    void send_packet_data(const char *data, const size_t size) override
+    using ki::protocol::net::Session::Session;
+    bool is_alive() const override
     {
-        PYBIND11_OVERLOAD_PURE(void, ParticipantBase, send_packet_data, data, size);
-    }
-    void close() override
-    {
-        PYBIND11_OVERLOAD_PURE(void, ParticipantBase, close, );
-    }
-};
-
-template <class SessionBase = ki::protocol::net::Session>
-class SessionTrampoline : public ParticipantTrampoline<SessionBase>
-{
-public:
-    using ParticipantTrampoline<SessionBase>::ParticipantTrampoline;
-    void on_established() override
-    {
-        PYBIND11_OVERLOAD(void, SessionBase, on_established, );
-    }
-    void on_application_message(const ki::protocol::net::PacketHeader &header) override
-    {
-        PYBIND11_OVERLOAD(void, SessionBase, on_application_message, header);
+        PYBIND11_OVERLOAD_PURE(
+            bool, ki::protocol::net::Session,
+            is_alive, );
     }
     void on_invalid_packet() override
     {
-        PYBIND11_OVERLOAD(void, SessionBase, on_invalid_packet, );
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::Session,
+            on_invalid_packet, );
+    }
+    void on_control_message(const ki::protocol::net::PacketHeader &header) override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::Session,
+            on_control_message, header);
+    }
+    void on_application_message(const ki::protocol::net::PacketHeader &header) override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::Session,
+            on_application_message, header);
+    }
+    void send_packet_data(const char *data, const size_t size) override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void, ki::protocol::net::Session,
+            send_packet_data, py::bytes(data, size), size);
+    }
+    void close() override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void, ki::protocol::net::Session,
+            close, );
     }
 };
 
-template <class DMLSessionBase = ki::protocol::net::DMLSession>
-class DMLSessionTrampoline : public SessionTrampoline<DMLSessionBase>
+class PyServerSession : public ki::protocol::net::ServerSession
 {
 public:
-    using SessionTrampoline<DMLSessionBase>::SessionTrampoline;
+    using ki::protocol::net::ServerSession::ServerSession;
+    void on_invalid_packet() override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::ServerSession,
+            on_invalid_packet, );
+    }
+    void on_application_message(const ki::protocol::net::PacketHeader &header) override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::ServerSession,
+            on_application_message, header);
+    }
+    void send_packet_data(const char *data, const size_t size) override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void, ki::protocol::net::ServerSession,
+            send_packet_data, py::bytes(data, size), size);
+    }
+    void close() override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void, ki::protocol::net::ServerSession,
+            close, );
+    }
+    void on_established() override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::ServerSession,
+            on_established, );
+    }
+};
+
+class PyClientSession : public ki::protocol::net::ClientSession
+{
+public:
+    using ki::protocol::net::ClientSession::ClientSession;
+    void on_invalid_packet() override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::ClientSession,
+            on_invalid_packet, );
+    }
+    void on_application_message(const ki::protocol::net::PacketHeader &header) override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::ClientSession,
+            on_application_message, header);
+    }
+    void send_packet_data(const char *data, const size_t size) override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void, ki::protocol::net::ClientSession,
+            send_packet_data, py::bytes(data, size), size);
+    }
+    void close() override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void, ki::protocol::net::ClientSession,
+            close, );
+    }
+};
+
+class PyDMLSession : public ki::protocol::net::DMLSession
+{
+public:
+    using ki::protocol::net::DMLSession::DMLSession;
+    bool is_alive() const override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            bool, ki::protocol::net::DMLSession,
+            is_alive, );
+    }
+    void on_invalid_packet() override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::DMLSession,
+            on_invalid_packet, );
+    }
+    void on_control_message(const ki::protocol::net::PacketHeader &header) override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::DMLSession,
+            on_control_message, header);
+    }
+    void send_packet_data(const char *data, const size_t size) override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void, ki::protocol::net::DMLSession,
+            send_packet_data, py::bytes(data, size), size);
+    }
+    void close() override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void, ki::protocol::net::DMLSession,
+            close, );
+    }
     void on_message(const ki::protocol::dml::Message &message) override
     {
-        PYBIND11_OVERLOAD(void, DMLSessionBase, on_message, message);
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::DMLSession,
+            on_message, message);
     }
     void on_invalid_message() override
     {
-        PYBIND11_OVERLOAD(void, DMLSessionBase, on_invalid_message, );
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::DMLSession,
+            on_invalid_message, );
     }
 };
 
-class ParticipantPublicist : public ki::protocol::net::Participant
+class PyServerDMLSession : public ki::protocol::net::ServerDMLSession
 {
 public:
-    using ki::protocol::net::Participant::process_data;
-    using ki::protocol::net::Participant::send_packet_data;
-    using ki::protocol::net::Participant::on_packet_available;
-    using ki::protocol::net::Participant::close;
+    using ki::protocol::net::ServerDMLSession::ServerDMLSession;
+    void on_invalid_packet() override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::ServerDMLSession,
+            on_invalid_packet, );
+    }
+    void send_packet_data(const char *data, const size_t size) override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void, ki::protocol::net::ServerDMLSession,
+            send_packet_data, py::bytes(data, size), size);
+    }
+    void close() override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void, ki::protocol::net::ServerDMLSession,
+            close, );
+    }
+    void on_message(const ki::protocol::dml::Message &message) override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::ServerDMLSession,
+            on_message, message);
+    }
+    void on_invalid_message() override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::ServerDMLSession,
+            on_invalid_message, );
+    }
 };
 
-class SessionPublicist : public ki::protocol::net::Session
+class PyClientDMLSession : public ki::protocol::net::ClientDMLSession
 {
 public:
-    using ki::protocol::net::Session::on_connected;
-    using ki::protocol::net::Session::on_established;
-    using ki::protocol::net::Session::on_application_message;
+    using ki::protocol::net::ClientDMLSession::ClientDMLSession;
+    void on_invalid_packet() override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::ClientDMLSession,
+            on_invalid_packet, );
+    }
+    void send_packet_data(const char *data, const size_t size) override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void, ki::protocol::net::ClientDMLSession,
+            send_packet_data, py::bytes(data, size), size);
+    }
+    void close() override
+    {
+        PYBIND11_OVERLOAD_PURE(
+            void, ki::protocol::net::ClientDMLSession,
+            close, );
+    }
+    void on_message(const ki::protocol::dml::Message &message) override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::ClientDMLSession,
+            on_message, message);
+    }
+    void on_invalid_message() override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::ClientDMLSession,
+            on_invalid_message, );
+    }
+};
+
+class PublicistSession: public ki::protocol::net::Session
+{
+public:
+    using ki::protocol::net::Session::process_data;
     using ki::protocol::net::Session::on_invalid_packet;
+    using ki::protocol::net::Session::on_control_message;
+    using ki::protocol::net::Session::on_application_message;
+    using ki::protocol::net::Session::send_packet_data;
+    using ki::protocol::net::Session::close;
 };
 
-class DMLSessionPublicist : public ki::protocol::net::DMLSession
+class PublicistServerSession : public ki::protocol::net::ServerSession
+{
+public:
+    using ki::protocol::net::ServerSession::on_connected;
+    using ki::protocol::net::ServerSession::on_established;
+};
+
+class PublicistClientSession : public ki::protocol::net::ClientSession
+{
+public:
+    using ki::protocol::net::ClientSession::on_connected;
+    using ki::protocol::net::ClientSession::on_established;
+};
+
+class PublicistDMLSession : public ki::protocol::net::DMLSession
 {
 public:
     using ki::protocol::net::DMLSession::on_message;
@@ -378,39 +568,14 @@ PYBIND11_MODULE(protocol, m)
         .value("WAITING_FOR_LENGTH", ReceiveState::WAITING_FOR_LENGTH)
         .value("WAITING_FOR_PACKET", ReceiveState::WAITING_FOR_PACKET);
 
-    // ParticipantType Enum
-    py::enum_<ParticipantType>(m_net, "ParticipantType")
-        .value("SERVER", ParticipantType::SERVER)
-        .value("CLIENT", ParticipantType::CLIENT);
-
-    // Participant Class
-    py::class_<Participant, ParticipantTrampoline<>> participant(m_net, "Participant");
-    participant.def(py::init<ParticipantType>(), py::arg("type"))
-        // Properties
-        .def_property("type",
-            &Participant::get_type,
-            &Participant::set_type,
-            py::return_value_policy::copy)
-        .def_property("maximum_packet_size",
-            &Participant::get_maximum_packet_size,
-            &Participant::set_maximum_packet_size,
-            py::return_value_policy::copy)
-        // Protected Methods
-        .def("process_data",
-            &ParticipantPublicist::process_data,
-            py::arg("data"), py::arg("size"))
-        // Virtual Methods
-        .def("send_packet_data",
-            &ParticipantPublicist::send_packet_data,
-            py::arg("data"), py::arg("size"))
-        .def("on_packet_available", &ParticipantPublicist::on_packet_available)
-        .def("close", &ParticipantPublicist::close);
-
     // Session Class
-    py::class_<Session, SessionTrampoline<>> session(m_net, "Session", participant);
-    session.def(py::init<ParticipantType, uint16_t>(),
-        py::arg("type"), py::arg("id"))
+    py::class_<Session, PySession>(m_net, "Session")
+        .def(py::init<uint16_t>(), py::arg("id") = 0)
         // Properties
+        .def_property("maximum_packet_size",
+            &Session::get_maximum_packet_size,
+            &Session::set_maximum_packet_size,
+            py::return_value_policy::copy)
         .def_property("access_level",
             &Session::get_access_level,
             &Session::set_access_level,
@@ -433,24 +598,72 @@ PYBIND11_MODULE(protocol, m)
             &Session::send_packet,
             py::arg("is_control"), py::arg("opcode"),
             py::arg("data"))
-        // Protected Methods
-        .def("on_connected", &SessionPublicist::on_connected)
-        // Virtual Methods
-        .def("on_established", &SessionPublicist::on_established)
-        .def("on_application_message",
-            &SessionPublicist::on_application_message,
+        // Methods (protected)
+        .def("process_data",
+            &PublicistSession::process_data,
+            py::arg("data"), py::arg("size"))
+        // Virtual Methods (protected)
+        .def("on_invalid_packet", &PublicistSession::on_invalid_packet)
+        .def("on_control_message",
+            &PublicistSession::on_control_message,
             py::arg("header"))
-        .def("on_invalid_packet", &SessionPublicist::on_invalid_packet);
+        .def("on_application_message",
+            &PublicistSession::on_application_message,
+            py::arg("header"))
+        // Pure Virtual Methods (protected)
+        .def("send_packet_data",
+            &PublicistSession::send_packet_data,
+            py::arg("data"), py::arg("size"))
+        .def("close", &PublicistSession::close);
+
+    // ServerSession Class
+    py::class_<ServerSession, Session, PyServerSession>(
+        m_net, "ServerSession", py::multiple_inheritance())
+        .def(py::init<uint16_t>(), py::arg("id"))
+        // Methods
+        .def("send_keep_alive",
+            &ServerSession::send_keep_alive,
+            py::arg("milliseconds_since_startup"))
+        // Methods (protected)
+        .def("on_connected", &PublicistServerSession::on_connected)
+        // Virtual Methods (protected)
+        .def("on_established", &PublicistServerSession::on_established);
+
+    // ClientSession Class
+    py::class_<ClientSession, Session, PyClientSession>(
+        m_net, "ClientSession", py::multiple_inheritance())
+        .def(py::init<uint16_t>(), py::arg("id"))
+        // Methods
+        .def("send_keep_alive", &ClientSession::send_keep_alive)
+        // Methods (protected)
+        .def("on_connected", &PublicistClientSession::on_connected)
+        // Virtual Methods (protected)
+        .def("on_established", &PublicistClientSession::on_established);
 
     // DMLSession Class
-    py::class_<DMLSession, DMLSessionTrampoline<>> dml_session(m_net, "DMLSession", session);
-    dml_session.def(py::init<ParticipantType, uint16_t, const ki::protocol::dml::MessageManager &>(),
-            py::arg("type"), py::arg("id"), py::arg("manager"))
+    py::class_<DMLSession, Session, PyDMLSession>(
+        m_net, "DMLSession", py::multiple_inheritance())
+        .def(py::init<uint16_t, const ki::protocol::dml::MessageManager &>(),
+            py::arg("id"), py::arg("manager"))
         // Methods
         .def("send_message", &DMLSession::send_message, py::arg("message"))
-        // Virtual Methods
-        .def("on_message", &DMLSessionPublicist::on_message, py::arg("message"))
-        .def("on_invalid_message", &DMLSessionPublicist::on_invalid_message);
+        // Virtual Methods (protected)
+        .def("on_message",
+            &PublicistDMLSession::on_message,
+            py::arg("message"))
+        .def("on_invalid_message", &PublicistDMLSession::on_invalid_message);
+
+    // ServerDMLSession Class
+    py::class_<ServerDMLSession, ServerSession, DMLSession, PyServerDMLSession>(
+        m_net, "ServerDMLSession", py::multiple_inheritance())
+        .def(py::init<uint16_t, const ki::protocol::dml::MessageManager &>(),
+            py::arg("id"), py::arg("manager"));
+
+    // ClientDMLSession Class
+    py::class_<ClientDMLSession, ClientSession, DMLSession, PyClientDMLSession>(
+        m_net, "ClientDMLSession", py::multiple_inheritance())
+        .def(py::init<uint16_t, const ki::protocol::dml::MessageManager &>(),
+            py::arg("id"), py::arg("manager"));
 
     // net Submodule (end)
 
@@ -461,92 +674,109 @@ PYBIND11_MODULE(protocol, m)
 
     // Opcode Enum
     py::enum_<Opcode>(m_control, "Opcode")
-        .value("SERVER_HELLO", Opcode::SERVER_HELLO)
+        .value("NONE", Opcode::NONE)
+        .value("SESSION_OFFER", Opcode::SESSION_OFFER)
         .value("UDP_HELLO", Opcode::UDP_HELLO)
-        .value("PING", Opcode::PING)
-        .value("PING_RSP", Opcode::PING_RSP)
-        .value("CLIENT_HELLO", Opcode::CLIENT_HELLO);
+        .value("KEEP_ALIVE", Opcode::KEEP_ALIVE)
+        .value("KEEP_ALIVE_RSP", Opcode::KEEP_ALIVE_RSP)
+        .value("SESSION_ACCEPT", Opcode::SESSION_ACCEPT);
 
-    // ServerHello Class
-    py::class_<ServerHello>(m_control, "ServerHello")
+    // SessionOffer Class
+    py::class_<SessionOffer>(m_control, "SessionOffer")
         .def(py::init<uint16_t, int32_t, uint32_t>(),
             py::arg("session_id") = 0,
             py::arg("timestamp") = 0,
             py::arg("milliseconds") = 0)
         // Properties
         .def_property("session_id",
-            &ServerHello::get_session_id,
-            &ServerHello::set_session_id,
+            &SessionOffer::get_session_id,
+            &SessionOffer::set_session_id,
             py::return_value_policy::copy)
         .def_property("timestamp",
-            &ServerHello::get_timestamp,
-            &ServerHello::set_timestamp,
+            &SessionOffer::get_timestamp,
+            &SessionOffer::set_timestamp,
             py::return_value_policy::copy)
         .def_property("milliseconds",
-            &ServerHello::get_milliseconds,
-            &ServerHello::set_milliseconds,
+            &SessionOffer::get_milliseconds,
+            &SessionOffer::set_milliseconds,
             py::return_value_policy::copy)
         // Read-only Properties
         .def_property_readonly("size",
-            &ServerHello::get_size,
+            &SessionOffer::get_size,
             py::return_value_policy::copy)
         // Extensions
-        DEF_TO_BYTES_EXTENSION(ServerHello)
-        DEF_FROM_BYTES_EXTENSION(ServerHello);
+        DEF_TO_BYTES_EXTENSION(SessionOffer)
+        DEF_FROM_BYTES_EXTENSION(SessionOffer);
 
-    // Ping Class
-    py::class_<Ping>(m_control, "Ping")
-        .def(py::init<uint16_t, uint16_t, uint8_t>(),
+    // ServerKeepAlive Class
+    py::class_<ServerKeepAlive>(m_control, "ServerKeepAlive")
+        .def(py::init<uint32_t>(), py::arg("timestamp") = 0)
+        // Properties
+        .def_property("timestamp",
+            &ServerKeepAlive::get_timestamp,
+            &ServerKeepAlive::set_timestamp,
+            py::return_value_policy::copy)
+        // Read-only Properties
+        .def_property_readonly("size",
+            &ServerKeepAlive::get_size,
+            py::return_value_policy::copy)
+        // Extensions
+        DEF_TO_BYTES_EXTENSION(ServerKeepAlive)
+        DEF_FROM_BYTES_EXTENSION(ServerKeepAlive);
+
+    // ClientKeepAlive Class
+    py::class_<ClientKeepAlive>(m_control, "ClientKeepAlive")
+        .def(py::init<uint16_t, uint16_t, uint16_t>(),
             py::arg("session_id") = 0,
             py::arg("milliseconds") = 0,
             py::arg("minutes") = 0)
         // Properties
         .def_property("session_id",
-            &Ping::get_session_id,
-            &Ping::set_session_id,
+            &ClientKeepAlive::get_session_id,
+            &ClientKeepAlive::set_session_id,
             py::return_value_policy::copy)
         .def_property("milliseconds",
-            &Ping::get_milliseconds,
-            &Ping::set_milliseconds,
+            &ClientKeepAlive::get_milliseconds,
+            &ClientKeepAlive::set_milliseconds,
             py::return_value_policy::copy)
         .def_property("minutes",
-            &Ping::get_minutes,
-            &Ping::set_minutes,
+            &ClientKeepAlive::get_minutes,
+            &ClientKeepAlive::set_minutes,
             py::return_value_policy::copy)
         // Read-only Properties
         .def_property_readonly("size",
-            &Ping::get_size,
+            &ClientKeepAlive::get_size,
             py::return_value_policy::copy)
         // Extensions
-        DEF_TO_BYTES_EXTENSION(Ping)
-        DEF_FROM_BYTES_EXTENSION(Ping);
+        DEF_TO_BYTES_EXTENSION(ClientKeepAlive)
+        DEF_FROM_BYTES_EXTENSION(ClientKeepAlive);
 
-    // ClientHello Class
-    py::class_<ClientHello>(m_control, "ClientHello")
+    // SessionAccept Class
+    py::class_<SessionAccept>(m_control, "SessionAccept")
         .def(py::init<uint16_t, int32_t, uint32_t>(),
             py::arg("session_id") = 0,
             py::arg("timestamp") = 0,
             py::arg("milliseconds") = 0)
         // Properties
         .def_property("session_id",
-            &ClientHello::get_session_id,
-            &ClientHello::set_session_id,
+            &SessionAccept::get_session_id,
+            &SessionAccept::set_session_id,
             py::return_value_policy::copy)
         .def_property("timestamp",
-            &ClientHello::get_timestamp,
-            &ClientHello::set_timestamp,
+            &SessionAccept::get_timestamp,
+            &SessionAccept::set_timestamp,
             py::return_value_policy::copy)
         .def_property("milliseconds",
-            &ClientHello::get_milliseconds,
-            &ClientHello::set_milliseconds,
+            &SessionAccept::get_milliseconds,
+            &SessionAccept::set_milliseconds,
             py::return_value_policy::copy)
         // Read-only Properties
         .def_property_readonly("size",
-            &ClientHello::get_size,
+            &SessionAccept::get_size,
             py::return_value_policy::copy)
         // Extensions
-        DEF_TO_BYTES_EXTENSION(ClientHello)
-        DEF_FROM_BYTES_EXTENSION(ClientHello);
+        DEF_TO_BYTES_EXTENSION(SessionAccept)
+        DEF_FROM_BYTES_EXTENSION(SessionAccept);
 
     // control Submodule (end)
 }
