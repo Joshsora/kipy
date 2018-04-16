@@ -74,10 +74,13 @@ PYBIND11_MODULE(dml, m)
     py::register_exception<parse_error>(m, "DMLParseError");
     py::register_exception<value_error>(m, "DMLValueError");
 
-    // Record Class
+    // Class: Record
     py::class_<Record>(m, "Record")
+
+        // Initializer
         .def(py::init<>())
-        // Descriptors
+
+        // Descriptor: __getitem__
         .def("__getitem__",
             [](const Record &self, std::string key)
             {
@@ -88,12 +91,14 @@ PYBIND11_MODULE(dml, m)
             },
             py::arg("key"),
             py::return_value_policy::reference)
+        // Descriptor: __iter__
         .def("__iter__",
             [](const Record &self)
             {
                 return py::make_iterator(self.fields_begin(), self.fields_end());
             },
             py::keep_alive<0, 1>())
+        // Descriptor: __contains__
         .def("__contains__",
             [](const Record &self, std::string key)
             {
@@ -101,15 +106,15 @@ PYBIND11_MODULE(dml, m)
             },
             py::arg("key"),
             py::return_value_policy::copy)
-        // Read-only Properties
-        .def_property_readonly("field_count",
-            &Record::get_field_count,
+
+        // Property: field_count (read-only)
+        .def_property_readonly("field_count", &Record::get_field_count,
             py::return_value_policy::copy)
-        .def_property_readonly("size",
-            &Record::get_size,
+        // Property: size (read-only)
+        .def_property_readonly("size", &Record::get_size,
             py::return_value_policy::copy)
-        // Methods
-        // has_field
+
+        // Methods: has_*_field()
         DEF_HAS_FIELD_METHOD("has_byt_field", BYT)
         DEF_HAS_FIELD_METHOD("has_ubyt_field", UBYT)
         DEF_HAS_FIELD_METHOD("has_shrt_field", SHRT)
@@ -121,7 +126,7 @@ PYBIND11_MODULE(dml, m)
         DEF_HAS_FIELD_METHOD("has_flt_field", FLT)
         DEF_HAS_FIELD_METHOD("has_dbl_field", DBL)
         DEF_HAS_FIELD_METHOD("has_gid_field", GID)
-        // get_field
+        // Methods: get_*_field()
         DEF_GET_FIELD_METHOD("get_byt_field", BYT)
         DEF_GET_FIELD_METHOD("get_ubyt_field", UBYT)
         DEF_GET_FIELD_METHOD("get_shrt_field", SHRT)
@@ -133,7 +138,7 @@ PYBIND11_MODULE(dml, m)
         DEF_GET_FIELD_METHOD("get_flt_field", FLT)
         DEF_GET_FIELD_METHOD("get_dbl_field", DBL)
         DEF_GET_FIELD_METHOD("get_gid_field", GID)
-        // add_field
+        // Methods: add_*_field()
         DEF_ADD_FIELD_METHOD("add_byt_field", BYT)
         DEF_ADD_FIELD_METHOD("add_ubyt_field", UBYT)
         DEF_ADD_FIELD_METHOD("add_shrt_field", SHRT)
@@ -145,11 +150,13 @@ PYBIND11_MODULE(dml, m)
         DEF_ADD_FIELD_METHOD("add_flt_field", FLT)
         DEF_ADD_FIELD_METHOD("add_dbl_field", DBL)
         DEF_ADD_FIELD_METHOD("add_gid_field", GID)
-        // Extensions
+
+        // Extension: to_bytes()
         DEF_TO_BYTES_EXTENSION(Record)
+        // Extension: from_bytes()
         DEF_FROM_BYTES_EXTENSION(Record);
 
-    // Field Classes
+    // Classes: *Field
     DEF_FIELD_CLASS("BytField", BYT);
     DEF_FIELD_CLASS("UBytField", UBYT);
     DEF_FIELD_CLASS("ShrtField", SHRT);
