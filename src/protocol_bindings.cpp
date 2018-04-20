@@ -54,7 +54,8 @@ namespace py = pybind11;
 class PySession : public ki::protocol::net::Session
 {
 public:
-    using ki::protocol::net::Session::Session;
+    PySession(const uint16_t id)
+        : Session(id) {}
     bool is_alive() const override
     {
         PYBIND11_OVERLOAD_PURE(
@@ -96,7 +97,8 @@ public:
 class PyServerSession : public ki::protocol::net::ServerSession
 {
 public:
-    using ki::protocol::net::ServerSession::ServerSession;
+    PyServerSession(const uint16_t id)
+        : Session(id), ServerSession(id) {}
     void on_invalid_packet() override
     {
         PYBIND11_OVERLOAD(
@@ -132,7 +134,8 @@ public:
 class PyClientSession : public ki::protocol::net::ClientSession
 {
 public:
-    using ki::protocol::net::ClientSession::ClientSession;
+    PyClientSession(const uint16_t id)
+        : Session(id), ClientSession(id) {}
     void on_invalid_packet() override
     {
         PYBIND11_OVERLOAD(
@@ -157,12 +160,19 @@ public:
             void, ki::protocol::net::ClientSession,
             close, );
     }
+    void on_established() override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::ClientSession,
+            on_established, );
+    }
 };
 
 class PyDMLSession : public ki::protocol::net::DMLSession
 {
 public:
-    using ki::protocol::net::DMLSession::DMLSession;
+    PyDMLSession(const uint16_t id, const ki::protocol::dml::MessageManager &manager)
+        : Session(id), DMLSession(id, manager) {}
     bool is_alive() const override
     {
         PYBIND11_OVERLOAD_PURE(
@@ -210,7 +220,8 @@ public:
 class PyServerDMLSession : public ki::protocol::net::ServerDMLSession
 {
 public:
-    using ki::protocol::net::ServerDMLSession::ServerDMLSession;
+    PyServerDMLSession(const uint16_t id, const ki::protocol::dml::MessageManager &manager)
+        : Session(id), ServerDMLSession(id, manager) {}
     void on_invalid_packet() override
     {
         PYBIND11_OVERLOAD(
@@ -246,7 +257,8 @@ public:
 class PyClientDMLSession : public ki::protocol::net::ClientDMLSession
 {
 public:
-    using ki::protocol::net::ClientDMLSession::ClientDMLSession;
+    PyClientDMLSession(const uint16_t id, const ki::protocol::dml::MessageManager &manager)
+        : Session(id), ClientDMLSession(id, manager) {}
     void on_invalid_packet() override
     {
         PYBIND11_OVERLOAD(
