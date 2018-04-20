@@ -341,70 +341,52 @@ PYBIND11_MODULE(protocol, m)
     py::class_<Message>(m_dml, "Message")
 
         // Initializer
-        .def(py::init<uint8_t, uint8_t>(),
-            py::arg("service_id") = 0,
-            py::arg("type") = 0)
+        .def(py::init<const MessageTemplate *>(),
+            py::arg("message_template ") = nullptr)
 
-        // Property: service_id
-        .def_property("service_id",
-            &Message::get_service_id,
-            &Message::set_service_id, py::return_value_policy::copy)
-        // Property: type
-        .def_property("type",
-            &Message::get_type,
-            &Message::set_type, py::return_value_policy::copy)
-        // Property: record
-        .def_property("record",
+        // Descriptor: __getitem__
+        .def("__getitem__",
+            [](const Message &self, std::string key)
+            {
+                auto *field = self.get_field(key);
+                if (field)
+                    return field;
+                throw py::key_error("Field with name " + key + " does not exist");
+            },
+            py::arg("key"), py::return_value_policy::reference)
+
+        // Property: template
+        .def_property("template",
+            &Message::get_template,
+            &Message::set_template, py::return_value_policy::copy)
+
+        // Property: record (read-only)
+        .def_property_readonly("record",
             static_cast<ki::dml::Record *(Message::*)()>(&Message::get_record),
-            &Message::set_record, py::return_value_policy::reference)
-
+            py::return_value_policy::reference)
+        // Property: service_id (read-only)
+        .def_property("service_id", &Message::get_service_id,
+            py::return_value_policy::copy)
+        // Property: type (read-only)
+        .def_property("type", &Message::get_type,
+            py::return_value_policy::copy)
+        // Property: message_size (read-only)
+        .def_property_readonly("message_size", &Message::get_message_size,
+            py::return_value_policy::copy)
+        // Property: handler (read-only)
+        .def_property_readonly("handler", &Message::get_handler,
+            py::return_value_policy::copy)
+        // Property: access_level (read-only)
+        .def_property_readonly("access_level", &Message::get_access_level,
+            py::return_value_policy::copy)
         // Property: size (read-only)
         .def_property_readonly("size", &Message::get_size,
             py::return_value_policy::copy)
-
-        // Method: use_template_record()
-        .def("use_template_record", &Message::use_template_record,
-            py::arg("record"))
 
         // Extension: to_bytes()
         DEF_TO_BYTES_EXTENSION(Message)
         // Extension: from_bytes()
         DEF_FROM_BYTES_EXTENSION(Message);
-
-    // Class: MessageBuilder
-    py::class_<MessageBuilder>(m_dml, "MessageBuilder")
-
-        // Initializer
-        .def(py::init<uint8_t, uint8_t>(),
-            py::arg("service_id") = 0,
-            py::arg("type") = 0)
-
-        // Property: message (read-only)
-        .def_property_readonly("message", &MessageBuilder::get_message,
-            py::return_value_policy::take_ownership)
-
-        // Method: set_service_id()
-        .def("set_service_id", &MessageBuilder::set_service_id,
-            py::arg("service_id"), py::return_value_policy::take_ownership)
-        // Method: set_message_type()
-        .def("set_message_type", &MessageBuilder::set_message_type,
-            py::arg("type"), py::return_value_policy::take_ownership)
-        // Method: use_template_record()
-        .def("use_template_record", &MessageBuilder::use_template_record,
-            py::arg("record"), py::return_value_policy::take_ownership)
-
-        // Methods: set_*_field_value()
-        DEF_SET_FIELD_VALUE_METHOD("set_byt_field_value", ki::dml::BYT)
-        DEF_SET_FIELD_VALUE_METHOD("set_ubyt_field_value", ki::dml::UBYT)
-        DEF_SET_FIELD_VALUE_METHOD("set_shrt_field_value", ki::dml::SHRT)
-        DEF_SET_FIELD_VALUE_METHOD("set_ushrt_field_value", ki::dml::USHRT)
-        DEF_SET_FIELD_VALUE_METHOD("set_int_field_value", ki::dml::INT)
-        DEF_SET_FIELD_VALUE_METHOD("set_uint_field_value", ki::dml::UINT)
-        DEF_SET_FIELD_VALUE_METHOD("set_str_field_value", ki::dml::STR)
-        DEF_SET_FIELD_VALUE_METHOD("set_wstr_field_value", ki::dml::WSTR)
-        DEF_SET_FIELD_VALUE_METHOD("set_flt_field_value", ki::dml::FLT)
-        DEF_SET_FIELD_VALUE_METHOD("set_dbl_field_value", ki::dml::DBL)
-        DEF_SET_FIELD_VALUE_METHOD("set_gid_field_value", ki::dml::GID);
 
     // Class: MessageTemplate
     py::class_<MessageTemplate>(m_dml, "MessageTemplate")
@@ -428,13 +410,21 @@ PYBIND11_MODULE(protocol, m)
         .def_property("service_id",
             &MessageTemplate::get_service_id,
             &MessageTemplate::set_service_id, py::return_value_policy::copy)
+        // Property: handler
+        .def_property("handler",
+            &MessageTemplate::get_handler,
+            &MessageTemplate::set_handler, py::return_value_policy::copy)
+        // Property: access_level
+        .def_property("access_level",
+            &MessageTemplate::get_access_level,
+            &MessageTemplate::set_access_level, py::return_value_policy::copy)
         // Property: record
         .def_property("record",
             &MessageTemplate::get_record,
             &MessageTemplate::set_record, py::return_value_policy::reference)
 
-        // Method: build_message()
-        .def("build_message", &MessageTemplate::build_message,
+        // Method: create_message()
+        .def("create_message", &MessageTemplate::create_message,
             py::return_value_policy::take_ownership);
 
     // Class: MessageModule
@@ -482,27 +472,17 @@ PYBIND11_MODULE(protocol, m)
         // Method: add_message_template()
         .def("add_message_template", &MessageModule::add_message_template,
             py::return_value_policy::reference)
-        // Method: get_message_template()
-        .def("get_message_template",
-            static_cast<const MessageTemplate *(MessageModule::*)(uint8_t) const>(
-                &MessageModule::get_message_template),
-            py::arg("type"), py::return_value_policy::reference)
-        // Method: get_message_template()
-        .def("get_message_template",
-            static_cast<const MessageTemplate *(MessageModule::*)(std::string) const>(
-                &MessageModule::get_message_template),
-            py::arg("name"), py::return_value_policy::reference)
-        // Method: add_message_template()
+        // Method: sort_lookup()
         .def("sort_lookup", &MessageModule::sort_lookup)
-        // Method: build_message()
-        .def("build_message",
-            static_cast<MessageBuilder &(MessageModule::*)(uint8_t) const>(
-                &MessageModule::build_message),
+        // Method: create_message()
+        .def("create_message",
+            static_cast<Message *(MessageModule::*)(uint8_t) const>(
+                &MessageModule::create_message),
             py::arg("message_type"), py::return_value_policy::take_ownership)
-        // Method: build_message()
-        .def("build_message",
-            static_cast<MessageBuilder &(MessageModule::*)(std::string) const>(
-                &MessageModule::build_message),
+        // Method: create_message()
+        .def("create_message",
+            static_cast<Message *(MessageModule::*)(std::string) const>(
+                &MessageModule::create_message),
             py::arg("message_name"), py::return_value_policy::take_ownership);
 
     // Class: MessageManager
@@ -511,41 +491,52 @@ PYBIND11_MODULE(protocol, m)
         // Initializer
         .def(py::init<>())
 
+        // Descriptor: __getitem__
+        .def("__getitem__",
+            [](const MessageManager &self, uint8_t key)
+            {
+                auto *module = self.get_module(key);
+                if (module)
+                    return module;
+                throw py::key_error("MessageModule with service ID " + std::to_string(key) + " does not exist");
+            },
+            py::arg("key"), py::return_value_policy::reference)
+        // Descriptor: __getitem__
+        .def("__getitem__",
+            [](const MessageManager &self, const std::string &key)
+            {
+                auto *module = self.get_module(key);
+                if (module)
+                    return module;
+                throw py::key_error("MessageModule with protocol type '" + key + "' does not exist");
+            },
+            py::arg("key"), py::return_value_policy::reference)
+
         // Method: load_module()
         .def("load_module", &MessageManager::load_module,
             py::arg("filepath"), py::return_value_policy::reference)
-        // Method: get_module()
-        .def("get_module",
-            static_cast<const MessageModule *(MessageManager::*)(uint8_t) const>(
-                &MessageManager::get_module),
-            py::arg("service_id"), py::return_value_policy::reference)
-        // Method: get_module()
-        .def("get_module",
-            static_cast<const MessageModule *(MessageManager::*)(const std::string &) const>(
-                &MessageManager::get_module),
-            py::arg("protocol_type"), py::return_value_policy::reference)
-        // Method: build_message()
-        .def("build_message",
-            static_cast<MessageBuilder &(MessageManager::*)(uint8_t, uint8_t) const>(
-                &MessageManager::build_message),
+        // Method: create_message()
+        .def("create_message",
+            static_cast<Message *(MessageManager::*)(uint8_t, uint8_t) const>(
+                &MessageManager::create_message),
             py::arg("service_id"),
             py::arg("message_type"), py::return_value_policy::take_ownership)
-        // Method: build_message()
-        .def("build_message",
-            static_cast<MessageBuilder &(MessageManager::*)(uint8_t, const std::string &) const>(
-                &MessageManager::build_message),
+        // Method: create_message()
+        .def("create_message",
+            static_cast<Message *(MessageManager::*)(uint8_t, const std::string &) const>(
+                &MessageManager::create_message),
             py::arg("service_id"),
             py::arg("message_name"), py::return_value_policy::take_ownership)
-        // Method: build_message()
-        .def("build_message",
-            static_cast<MessageBuilder &(MessageManager::*)(const std::string &, uint8_t) const>(
-                &MessageManager::build_message),
+        // Method: create_message()
+        .def("create_message",
+            static_cast<Message *(MessageManager::*)(const std::string &, uint8_t) const>(
+                &MessageManager::create_message),
             py::arg("protocol_type"),
             py::arg("message_type"), py::return_value_policy::take_ownership)
-        // Method: build_message()
-        .def("build_message",
-            static_cast<MessageBuilder &(MessageManager::*)(const std::string &, const std::string &) const>(
-                &MessageManager::build_message),
+        // Method: create_message()
+        .def("create_message",
+            static_cast<Message *(MessageManager::*)(const std::string &, const std::string &) const>(
+                &MessageManager::create_message),
             py::arg("protocol_type"),
             py::arg("message_name"), py::return_value_policy::take_ownership)
 
