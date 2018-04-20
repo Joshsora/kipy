@@ -5,7 +5,8 @@ from .protocol.dml import MessageManager
 from .protocol.net import ServerSession as CServerSession, \
     ClientSession as CClientSession, \
     ServerDMLSession as CServerDMLSession, \
-    ClientDMLSession as CClientDMLSession
+    ClientDMLSession as CClientDMLSession, \
+    SessionCloseErrorCode
 from .util import IDAllocator, AllocationError
 
 
@@ -22,8 +23,8 @@ class SessionBase(object):
         if self.transport is not None:
             self.transport.write(data)
 
-    def close(self):
-        self.logger.debug('id=%d, close()' % self.id)
+    def close(self, error):
+        self.logger.debug('id=%d, close(%r)' % (self.id, error))
 
         if self.transport is not None:
             self.transport.close()
@@ -61,9 +62,10 @@ class DMLSessionBase(SessionBase):
             handler_func(self, message)
         else:
             self.logger.warning("id=%d, No handler found: '%s'" % (self.id, message.handler))
+            # FIXME: self.close(SessionCloseErrorCode.UNHANDLED_APPLICATION_MESSAGE)
 
-    def on_invalid_message(self):
-        self.logger.warning('id=%d, Got an invalid message!' % self.id)
+    def on_invalid_message(self, error):
+        self.logger.warning('id=%d, Got an invalid message! (%r)' % (self.id, error))
 
 
 class ServerDMLSession(DMLSessionBase, CServerDMLSession):
@@ -71,27 +73,18 @@ class ServerDMLSession(DMLSessionBase, CServerDMLSession):
         DMLSessionBase.__init__(self, transport)
         CServerDMLSession.__init__(self, id, manager)
 
-        self.manager = manager
-
 
 class ClientDMLSession(DMLSessionBase, CClientDMLSession):
     def __init__(self, transport, id, manager):
         DMLSessionBase.__init__(self, transport)
         CClientDMLSession.__init__(self, id, manager)
 
-        self.manager = manager
 
-
-class MessageHandler(object):
-    def __init__(self, name):
-        self.name = name
-
-    def __call__(self, f):
-        DMLSessionBase.handlers[self.name] = f
+def msghandler(name):
+    def wrapper(f):
+        DMLSessionBase.handlers[name] = f
         return f
-
-
-msghandler = MessageHandler  # Alias
+    return wrapper
 
 
 class Protocol(asyncio.Protocol):
@@ -130,7 +123,7 @@ class Protocol(asyncio.Protocol):
             self.server.session_id_allocator.free(self.session.id)
 
             # Destroy the session.
-            self.session.close()
+            self.session.close(SessionCloseErrorCode.SESSION_DIED)
             self.session = None
 
         self.server = None

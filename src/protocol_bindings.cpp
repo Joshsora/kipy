@@ -85,11 +85,11 @@ public:
             void, ki::protocol::net::Session,
             send_packet_data, py::bytes(data, size), size);
     }
-    void close() override
+    void close(ki::protocol::net::SessionCloseErrorCode error) override
     {
         PYBIND11_OVERLOAD_PURE(
             void, ki::protocol::net::Session,
-            close, );
+            close, error);
     }
 };
 
@@ -116,11 +116,11 @@ public:
             void, ki::protocol::net::ServerSession,
             send_packet_data, py::bytes(data, size), size);
     }
-    void close() override
+    void close(ki::protocol::net::SessionCloseErrorCode error) override
     {
         PYBIND11_OVERLOAD_PURE(
             void, ki::protocol::net::ServerSession,
-            close, );
+            close, error);
     }
     void on_established() override
     {
@@ -153,11 +153,11 @@ public:
             void, ki::protocol::net::ClientSession,
             send_packet_data, py::bytes(data, size), size);
     }
-    void close() override
+    void close(ki::protocol::net::SessionCloseErrorCode error) override
     {
         PYBIND11_OVERLOAD_PURE(
             void, ki::protocol::net::ClientSession,
-            close, );
+            close, error);
     }
     void on_established() override
     {
@@ -196,23 +196,23 @@ public:
             void, ki::protocol::net::DMLSession,
             send_packet_data, py::bytes(data, size), size);
     }
-    void close() override
+    void close(ki::protocol::net::SessionCloseErrorCode error) override
     {
         PYBIND11_OVERLOAD_PURE(
             void, ki::protocol::net::DMLSession,
-            close, );
+            close, error);
     }
-    void on_message(const ki::protocol::dml::Message &message) override
+    void on_message(const ki::protocol::dml::Message *message) override
     {
         PYBIND11_OVERLOAD(
             void, ki::protocol::net::DMLSession,
             on_message, message);
     }
-    void on_invalid_message() override
+    void on_invalid_message(ki::protocol::net::InvalidDMLMessageErrorCode error) override
     {
         PYBIND11_OVERLOAD(
             void, ki::protocol::net::DMLSession,
-            on_invalid_message, );
+            on_invalid_message, error);
     }
 };
 
@@ -233,11 +233,11 @@ public:
             void, ki::protocol::net::ServerDMLSession,
             send_packet_data, py::bytes(data, size), size);
     }
-    void close() override
+    void close(ki::protocol::net::SessionCloseErrorCode error) override
     {
         PYBIND11_OVERLOAD_PURE(
             void, ki::protocol::net::ServerDMLSession,
-            close, );
+            close, error);
     }
     void on_established() override
     {
@@ -245,17 +245,17 @@ public:
             void, ki::protocol::net::ServerDMLSession,
             on_established, );
     }
-    void on_message(const ki::protocol::dml::Message &message) override
+    void on_message(const ki::protocol::dml::Message *message) override
     {
         PYBIND11_OVERLOAD(
             void, ki::protocol::net::ServerDMLSession,
             on_message, message);
     }
-    void on_invalid_message() override
+    void on_invalid_message(ki::protocol::net::InvalidDMLMessageErrorCode error) override
     {
         PYBIND11_OVERLOAD(
             void, ki::protocol::net::ServerDMLSession,
-            on_invalid_message, );
+            on_invalid_message, error);
     }
 };
 
@@ -276,11 +276,11 @@ public:
             void, ki::protocol::net::ClientDMLSession,
             send_packet_data, py::bytes(data, size), size);
     }
-    void close() override
+    void close(ki::protocol::net::SessionCloseErrorCode error) override
     {
         PYBIND11_OVERLOAD_PURE(
             void, ki::protocol::net::ClientDMLSession,
-            close, );
+            close, error);
     }
     void on_established() override
     {
@@ -288,17 +288,17 @@ public:
             void, ki::protocol::net::ClientDMLSession,
             on_established, );
     }
-    void on_message(const ki::protocol::dml::Message &message) override
+    void on_message(const ki::protocol::dml::Message *message) override
     {
         PYBIND11_OVERLOAD(
             void, ki::protocol::net::ClientDMLSession,
             on_message, message);
     }
-    void on_invalid_message() override
+    void on_invalid_message(ki::protocol::net::InvalidDMLMessageErrorCode error) override
     {
         PYBIND11_OVERLOAD(
             void, ki::protocol::net::ClientDMLSession,
-            on_invalid_message, );
+            on_invalid_message, error);
     }
 };
 
@@ -374,7 +374,7 @@ PYBIND11_MODULE(protocol, m)
         // Property: record (read-only)
         .def_property_readonly("record",
             static_cast<ki::dml::Record *(Message::*)()>(&Message::get_record),
-            py::return_value_policy::reference)
+            py::return_value_policy::reference_internal)
         // def_property_readonly: service_id (read-only)
         .def_property_readonly("service_id", &Message::get_service_id,
             py::return_value_policy::copy)
@@ -432,7 +432,7 @@ PYBIND11_MODULE(protocol, m)
         // Property: record
         .def_property("record",
             &MessageTemplate::get_record,
-            &MessageTemplate::set_record, py::return_value_policy::reference)
+            &MessageTemplate::set_record, py::return_value_policy::reference_internal)
 
         // Method: create_message()
         .def("create_message", &MessageTemplate::create_message,
@@ -599,6 +599,18 @@ PYBIND11_MODULE(protocol, m)
         .value("WAITING_FOR_LENGTH", ReceiveState::WAITING_FOR_LENGTH)
         .value("WAITING_FOR_PACKET", ReceiveState::WAITING_FOR_PACKET);
 
+    // Enum: SessionCloseErrorCode
+    py::enum_<SessionCloseErrorCode>(m_net, "SessionCloseErrorCode")
+        .value("NONE", SessionCloseErrorCode::NONE)
+        .value("APPLICATION_ERROR", SessionCloseErrorCode::APPLICATION_ERROR)
+        .value("INVALID_FRAMING_START_SIGNAL", SessionCloseErrorCode::INVALID_FRAMING_START_SIGNAL)
+        .value("INVALID_FRAMING_SIZE_EXCEEDS_MAXIMUM", SessionCloseErrorCode::INVALID_FRAMING_SIZE_EXCEEDS_MAXIMUM)
+        .value("UNHANDLED_CONTROL_MESSAGE", SessionCloseErrorCode::UNHANDLED_CONTROL_MESSAGE)
+        .value("UNHANDLED_APPLICATION_MESSAGE", SessionCloseErrorCode::UNHANDLED_APPLICATION_MESSAGE)
+        .value("INVALID_MESSAGE", SessionCloseErrorCode::INVALID_MESSAGE)
+        .value("SESSION_OFFER_TIMED_OUT", SessionCloseErrorCode::SESSION_OFFER_TIMED_OUT)
+        .value("SESSION_DIED", SessionCloseErrorCode::SESSION_DIED);
+
     // Class: Session
     py::class_<Session, PySession>(m_net, "Session")
 
@@ -653,7 +665,8 @@ PYBIND11_MODULE(protocol, m)
             py::arg("data"),
             py::arg("size"))
         // Method: close() (protected, pure virtual)
-        .def("close", &PublicistSession::close);
+        .def("close", &PublicistSession::close,
+            py::arg("error"));
 
     // Class: ServerSession
     py::class_<ServerSession, Session, PyServerSession>(
@@ -690,6 +703,11 @@ PYBIND11_MODULE(protocol, m)
         // Method: on_established() (protected, virtual)
         .def("on_established", &PublicistClientSession::on_established);
 
+    // Enum: InvalidDMLMessageErrorCode
+    py::enum_<InvalidDMLMessageErrorCode>(m_net, "InvalidDMLMessageErrorCode")
+        .value("INVALID_MESSAGE_DATA", InvalidDMLMessageErrorCode::INVALID_MESSAGE_DATA)
+        .value("INSUFFICIENT_ACCESS", InvalidDMLMessageErrorCode::INSUFFICIENT_ACCESS);
+
     // Class: DMLSession
     py::class_<DMLSession, Session, PyDMLSession>(
         m_net, "DMLSession", py::multiple_inheritance())
@@ -698,6 +716,10 @@ PYBIND11_MODULE(protocol, m)
         .def(py::init<uint16_t, const ki::protocol::dml::MessageManager &>(),
             py::arg("id"),
             py::arg("manager"))
+
+        // Property: manager (read-only)
+        .def_property_readonly("manager", &DMLSession::get_manager,
+            py::return_value_policy::reference_internal)
 
         // Method: send_message()
         .def("send_message", &DMLSession::send_message,
