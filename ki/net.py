@@ -32,6 +32,8 @@ class SessionBase(object):
     def on_established(self):
         self.logger.debug('id=%d, on_established()' % self.id)
 
+        self.access_level = 1
+
     def on_invalid_packet(self):
         self.logger.warning('id=%d, Got an invalid packet!' % self.id)
 
@@ -49,8 +51,16 @@ class ClientSession(SessionBase, CClientSession):
 
 
 class DMLSessionBase(SessionBase):
+    handlers = {}
+
     def on_message(self, message):
-        self.logger.debug('id=%d, on_message(...)' % self.id)
+        self.logger.debug('id=%d, on_message(%r)' % (self.id, message.handler))
+
+        handler_func = self.handlers.get(message.handler)
+        if handler_func is not None:
+            handler_func(self, message)
+        else:
+            self.logger.warning("id=%d, No handler found: '%s'" % (self.id, message.handler))
 
     def on_invalid_message(self):
         self.logger.warning('id=%d, Got an invalid message!' % self.id)
@@ -61,11 +71,27 @@ class ServerDMLSession(DMLSessionBase, CServerDMLSession):
         DMLSessionBase.__init__(self, transport)
         CServerDMLSession.__init__(self, id, manager)
 
+        self.manager = manager
+
 
 class ClientDMLSession(DMLSessionBase, CClientDMLSession):
     def __init__(self, transport, id, manager):
         DMLSessionBase.__init__(self, transport)
         CClientDMLSession.__init__(self, id, manager)
+
+        self.manager = manager
+
+
+class MessageHandler(object):
+    def __init__(self, name):
+        self.name = name
+
+    def __call__(self, f):
+        DMLSessionBase.handlers[self.name] = f
+        return f
+
+
+msghandler = MessageHandler  # Alias
 
 
 class Protocol(asyncio.Protocol):
@@ -84,6 +110,8 @@ class Protocol(asyncio.Protocol):
         except AllocationError:
             # An ID could not be allocated for a new session; refuse
             # connection.
+            self.logger.warning('Failed to allocate an ID for a new session!')
+            self.logger.warning('Refusing connection.')
             transport.close()
         else:
             self.session.on_connected()

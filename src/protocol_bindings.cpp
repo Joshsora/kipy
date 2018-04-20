@@ -7,7 +7,6 @@
 #include <ki/dml/Record.h>
 #include <ki/protocol/exception.h>
 #include <ki/protocol/dml/Message.h>
-#include <ki/protocol/dml/MessageBuilder.h>
 #include <ki/protocol/dml/MessageTemplate.h>
 #include <ki/protocol/dml/MessageModule.h>
 #include <ki/protocol/dml/MessageManager.h>
@@ -240,6 +239,12 @@ public:
             void, ki::protocol::net::ServerDMLSession,
             close, );
     }
+    void on_established() override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::ServerDMLSession,
+            on_established, );
+    }
     void on_message(const ki::protocol::dml::Message &message) override
     {
         PYBIND11_OVERLOAD(
@@ -276,6 +281,12 @@ public:
         PYBIND11_OVERLOAD_PURE(
             void, ki::protocol::net::ClientDMLSession,
             close, );
+    }
+    void on_established() override
+    {
+        PYBIND11_OVERLOAD(
+            void, ki::protocol::net::ClientDMLSession,
+            on_established, );
     }
     void on_message(const ki::protocol::dml::Message &message) override
     {
@@ -364,11 +375,11 @@ PYBIND11_MODULE(protocol, m)
         .def_property_readonly("record",
             static_cast<ki::dml::Record *(Message::*)()>(&Message::get_record),
             py::return_value_policy::reference)
-        // Property: service_id (read-only)
-        .def_property("service_id", &Message::get_service_id,
+        // def_property_readonly: service_id (read-only)
+        .def_property_readonly("service_id", &Message::get_service_id,
             py::return_value_policy::copy)
         // Property: type (read-only)
-        .def_property("type", &Message::get_type,
+        .def_property_readonly("type", &Message::get_type,
             py::return_value_policy::copy)
         // Property: message_size (read-only)
         .def_property_readonly("message_size", &Message::get_message_size,
