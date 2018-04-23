@@ -9,6 +9,11 @@ class IDAllocator(object):
         self.unused_ids = set()
 
     def allocate(self):
+        """"Returns an unused ID.
+
+        If there are no more IDs left in the pool, an AllocationError
+        will be thrown.
+        """
         if self.unused_ids:
             return self.unused_ids.pop()
         if self.next_id > self.max_id:
@@ -18,4 +23,5 @@ class IDAllocator(object):
         return allocated_id
 
     def free(self, id):
+        """Allows the given ID to be allocated again."""
         self.unused_ids.add(id)

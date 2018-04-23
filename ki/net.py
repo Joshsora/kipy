@@ -39,7 +39,7 @@ class SessionBase(object):
         """Ensure this session has been receiving keep alive packets periodically.
 
         If this session hasn't received any within the allowed time frame, the
-        connection will be force-closed.
+        on_timeout() event will be triggered..
         """
         while True:
             if not self.alive:
@@ -71,7 +71,10 @@ class SessionBase(object):
             self._keep_alive_task = None
 
         if self.transport is not None:
+            # close() may be called more than once.
+            # For this reason, we write our log message here.
             self.logger.debug('id=%d, close(%r)' % (self.id, error))
+
             self.transport.close()
             self.transport = None
 
@@ -85,7 +88,10 @@ class SessionBase(object):
         self.access_level = AccessLevel.ESTABLISHED.value
 
     def on_timeout(self):
-        """Called when this session is discovered to no longer be alive."""
+        """Called when this session is discovered to no longer be alive.
+
+        This will cause the session to force-close.
+        """
         self.logger.debug('id=%d, Session timed out!' % self.id)
         self.close(SessionCloseErrorCode.SESSION_DIED)
 
