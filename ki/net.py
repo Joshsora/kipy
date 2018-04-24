@@ -236,13 +236,13 @@ class ServerProtocol(ProtocolBase):
 
 
 class Server(object):
+    logger = logging.getLogger('SERVER')
+
     PROTOCOL_CLS = ServerProtocol
     SESSION_CLS = ServerSession
 
     MIN_SESSION_ID = 1
     MAX_SESSION_ID = 0xFFFF
-
-    logger = logging.getLogger('SERVER')
 
     def __init__(self, port):
         self.port = port
@@ -373,10 +373,10 @@ class ClientProtocol(ProtocolBase):
 
 
 class Client(object):
+    logger = logging.getLogger('CLIENT')
+
     PROTOCOL_CLS = ClientProtocol
     SESSION_CLS = ClientSession
-
-    logger = logging.getLogger('CLIENT')
 
     def __init__(self, host, port):
         self.host = host
