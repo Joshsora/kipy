@@ -11,12 +11,13 @@ from .error import ErrorCodeEnum, format_error_message
 
 class ConfigError(ErrorCodeEnum):
     INTERNAL = object()
-    FILE_ERROR = object()
-    INVALID_DATA_TYPE = object()
-    INVALID_DATA = object()
-    MISSING_DATA = object()
-    INVALID_CHILD = object()
+    INVALID_DEFINITION = object()
     INVALID_PATH = object()
+    FILE_ERROR = object()
+    INVALID_DATA = object()
+    INVALID_TYPE = object()
+    INVALID_VALUE = object()
+    MISSING_DATA = object()
 
 
 class ConfigNode(object):
@@ -32,22 +33,32 @@ class ConfigNode(object):
         self._parent = None
 
     def __repr__(self):
+        """Returns the string representation of this object.
+
+         Example: ClassName<Path>
+         """
         return '%s<%s>' % (self.__class__.__name__, self.path)
 
     @property
     def parent(self):
+        """Returns the parent node."""
         return self._parent
 
     @parent.setter
     def parent(self, value):
-        # If we are a child, we require a name.
+        """Sets the parent node.
+
+        This node must have a name beforehand, otherwise an error will
+        be given.
+        """
+        # All child nodes require a name so that we can construct a path.
         if value is not None and self.name is None:
             error_message = format_error_message(
-                code=ConfigError.INVALID_CHILD,
+                code=ConfigError.INVALID_DEFINITION,
                 reason='A child cannot be defined without a name.',
                 recommendation='Contact the developers.')
             self.logger.error(error_message)
-            sys.exit(ConfigError.INVALID_CHILD)
+            sys.exit(ConfigError.INVALID_DEFINITION)
 
         self._parent = value
 
@@ -64,8 +75,8 @@ class ConfigNode(object):
     def _write_doc_indent(self, stream=sys.stdout, indent_level=0):
         stream.write(self.DOC_INDENT_TOKEN * indent_level)
 
-    def _write_doc_name(self, stream=sys.stdout, indent_level=0):
-        # Write this object's representation.
+    def _write_doc_title(self, stream=sys.stdout, indent_level=0):
+        # Write the representation of this object.
         self._write_doc_indent(stream=stream, indent_level=indent_level)
         stream.write('%r\n' % self)
 
@@ -80,8 +91,8 @@ class ConfigNode(object):
             stream.write('%s\n' % line)
 
     def write_doc(self, stream=sys.stdout, wrap_width=70, indent_level=0):
-        """Writes this node's documentation to the given stream."""
-        self._write_doc_name(stream=stream, indent_level=indent_level)
+        """Writes the documentation of this node to the given stream."""
+        self._write_doc_title(stream=stream, indent_level=indent_level)
         indent_level += 1
         self._write_doc_description(stream=stream, wrap_width=wrap_width,
                                     indent_level=indent_level)
@@ -103,23 +114,23 @@ class ConfigVar(ConfigNode):
         if self.type is not None and self.default is not None:
             if not isinstance(self.default, self.type):
                 error_message = format_error_message(
-                    code=ConfigError.INVALID_DATA_TYPE,
+                    code=ConfigError.INVALID_TYPE,
                     reason='Invalid default value given for %r: %r' %
                            (self, self.default),
                     recommendation='Contact the developers.')
                 self.logger.error(error_message)
-                sys.exit(ConfigError.INVALID_DATA_TYPE)
+                sys.exit(ConfigError.INVALID_TYPE)
 
         # When both specified, `default` must meet the `constraint` requirements.
         if self.default is not None and self.constraint is not None:
             if not self.constraint(self.default):
                 error_message = format_error_message(
-                    code=ConfigError.INVALID_DATA,
+                    code=ConfigError.INVALID_VALUE,
                     reason='Invalid default value given for %r: %r' %
                            (self, self.default),
                     recommendation='Contact the developers.')
                 self.logger.error(error_message)
-                sys.exit(ConfigError.INVALID_DATA)
+                sys.exit(ConfigError.INVALID_VALUE)
 
         self._value = None
 
@@ -144,52 +155,52 @@ class ConfigVar(ConfigNode):
         if self.type is not None:
             if not isinstance(value, self.type):
                 error_message = format_error_message(
-                    code=ConfigError.INVALID_DATA,
+                    code=ConfigError.INVALID_TYPE,
                     reason='Invalid value given for %r: %r' % (self, value),
                     recommendation='Verify that the value given is the '
                                    'correct type.')
                 self.logger.error(error_message)
-                sys.exit(ConfigError.INVALID_DATA)
+                sys.exit(ConfigError.INVALID_TYPE)
 
         # Check the value against our constraint.
         if self.constraint is not None:
             if not self.constraint(value):
                 error_message = format_error_message(
-                    code=ConfigError.INVALID_DATA,
+                    code=ConfigError.INVALID_VALUE,
                     reason='Invalid value given for %r: %r' % (self, value),
                     recommendation='Verify that the value given meets the '
                                    'requirements.')
                 self.logger.error(error_message)
-                sys.exit(ConfigError.INVALID_DATA)
+                sys.exit(ConfigError.INVALID_VALUE)
 
         # We're all good. Go ahead and set the current value.
         self._value = value
 
     def _write_doc_type(self, stream=sys.stdout, indent_level=0):
-        if self.type is not None:
-            self._write_doc_indent(stream=stream, indent_level=indent_level)
+        self._write_doc_indent(stream=stream, indent_level=indent_level)
 
-            # Use `type.__name__` if possible, otherwise use its
-            # representation.
-            type_name = getattr(self.type, '__name__')
-            if type_name is None:
-                type_name = repr(self.type)
+        # Use `type.__name__` if possible, otherwise use its
+        # representation.
+        type_name = getattr(self.type, '__name__')
+        if type_name is None:
+            type_name = repr(self.type)
 
-            stream.write('%s%s\n' % (self.DOC_TYPE_PREFIX, type_name))
+        stream.write('%s%s\n' % (self.DOC_TYPE_PREFIX, type_name))
 
     def _write_doc_default(self, stream=sys.stdout, indent_level=0):
-        if self.default is not None:
-            self._write_doc_indent(stream=stream, indent_level=indent_level)
-            stream.write('%s%r\n' % (self.DOC_DEFAULT_PREFIX, self.default))
+        self._write_doc_indent(stream=stream, indent_level=indent_level)
+        stream.write('%s%r\n' % (self.DOC_DEFAULT_PREFIX, self.default))
 
     def write_doc(self, stream=sys.stdout, wrap_width=70, indent_level=0):
-        """Writes this node's documentation to the given stream."""
+        """Writes the documentation of this variable to the given stream."""
         super().write_doc(stream=stream, wrap_width=wrap_width,
                           indent_level=indent_level)
 
         indent_level += 1
-        self._write_doc_type(stream=stream, indent_level=indent_level)
-        self._write_doc_default(stream=stream, indent_level=indent_level)
+        if self.type is not None:
+            self._write_doc_type(stream=stream, indent_level=indent_level)
+        if self.default is not None:
+            self._write_doc_default(stream=stream, indent_level=indent_level)
 
 
 class ConfigCategory(ConfigNode):
@@ -200,10 +211,11 @@ class ConfigCategory(ConfigNode):
         self.vars = {}
 
     def __getitem__(self, key):
+        """Returns the value of the variable using the given name."""
         return self.vars[key].value
 
     def add_category(self, category):
-        """Adds the given category to this category as a child."""
+        """Adds the given category to this one as a child."""
         if not isinstance(category, ConfigCategory):
             error_message = format_error_message(
                 code=ConfigError.INTERNAL,
@@ -227,13 +239,19 @@ class ConfigCategory(ConfigNode):
         self.vars[var.name] = var
 
     def define_category(self, name, description=None):
-        """Defines a new child category."""
+        """Defines a new category as a child of this one.
+
+        Returns the category.
+        """
         category = ConfigCategory(name=name, description=description)
         self.add_category(category)
         return category
 
     def define_var(self, name, description=None, type=None, default=None, constraint=None):
-        """Defines a new variable in this category."""
+        """Defines a new variable in this category.
+
+        Returns the variable.
+        """
         var = ConfigVar(name=name, description=description, type=type,
                         default=default, constraint=constraint)
         self.add_var(var)
@@ -275,7 +293,7 @@ class ConfigCategory(ConfigNode):
         """Loads values from the given dictionary.
 
         All of the variables belonging to this category, and each child
-        categories will be set.
+        category will be set.
 
         Returns any missing data in the form of:
             (missing_categories, missing_vars)
@@ -386,7 +404,7 @@ class ConfigCategory(ConfigNode):
                                indent_level=indent_level)
 
     def write_doc(self, stream=sys.stdout, wrap_width=70, indent_level=0):
-        """Writes this node's documentation to the given stream."""
+        """Writes the documentation of this category to the given stream."""
         super().write_doc(stream=stream, wrap_width=wrap_width,
                           indent_level=indent_level)
 
@@ -402,7 +420,7 @@ class Config(ConfigCategory):
         return '%s<root>' % self.__class__.__name__
 
     def write_doc(self, stream=sys.stdout, wrap_width=70, indent_level=0):
-        """Writes this node's documentation to the given stream."""
+        """Writes the documentation of this config to the given stream."""
         for var in self.vars.values():
             var.write_doc(stream=stream, wrap_width=wrap_width,
                           indent_level=indent_level)
