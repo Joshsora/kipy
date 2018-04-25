@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from enum import Enum
+from enum import IntEnum
 
 from .protocol.dml import MessageManager
 from .protocol.net import ServerSession as CServerSession, \
@@ -20,7 +20,7 @@ def msghandler(name):
     return wrapper
 
 
-class AccessLevel(Enum):
+class AccessLevel(IntEnum):
     NEW = 0
     ESTABLISHED = 1
     AUTHENTICATED = 2
@@ -29,9 +29,10 @@ class AccessLevel(Enum):
 class SessionBase(object):
     logger = logging.getLogger('SESSION')
 
-    def __init__(self, transport, ensure_alive_interval=10.0):
+    ENSURE_ALIVE_INTERVAL = 10.0
+
+    def __init__(self, transport):
         self.transport = transport
-        self.ensure_alive_interval = ensure_alive_interval
 
         self._ensure_alive_task = asyncio.ensure_future(self._ensure_alive())
 
@@ -39,25 +40,22 @@ class SessionBase(object):
         """Ensure this session has been receiving keep alive packets periodically.
 
         If this session hasn't received any within the allowed time frame, the
-        on_timeout() event will be triggered..
+        on_timeout() event will be triggered.
         """
         while True:
             if not self.alive:
                 self.on_timeout()
-                break
-            await asyncio.sleep(self.ensure_alive_interval)
+            await asyncio.sleep(self.ENSURE_ALIVE_INTERVAL)
 
     def on_invalid_packet(self):
         """"Overrides `Session.on_invalid_packet()`."""
-        self.logger.warning('id=%d, Got an invalid packet!' % self.id)
+        self.logger.warning('id=%d, Got an invalid packet!', self.id)
         self.close(SessionCloseErrorCode.INVALID_MESSAGE)
 
     def send_packet_data(self, data, size):
         """"Overrides `Session.send_packet_data()`."""
-        self.logger.debug('id=%d, send_packet_data(%r, %d)' %
-                          (self.id, data, size))
-
         if self.transport is not None:
+            self.logger.debug('id=%d, send_packet_data(%r, %d)', self.id, data, size)
             self.transport.write(data)
 
     def close(self, error):
@@ -66,14 +64,10 @@ class SessionBase(object):
             self._ensure_alive_task.cancel()
             self._ensure_alive_task = None
 
-        if self._keep_alive_task is not None:
-            self._keep_alive_task.cancel()
-            self._keep_alive_task = None
-
         if self.transport is not None:
             # close() may be called more than once.
-            # For this reason, we write our log message here.
-            self.logger.debug('id=%d, close(%r)' % (self.id, error))
+            # For this reason, we only log when the transport gets closed.
+            self.logger.debug('id=%d, close(%r)', self.id, error)
 
             self.transport.close()
             self.transport = None
@@ -81,18 +75,17 @@ class SessionBase(object):
     def on_established(self):
         """"Overrides `Session.on_established()`.
 
-        Sets the access level to ESTABLISHED.
+        Sets the access level to `AccessLevel.ESTABLISHED`.
         """
-        self.logger.debug('id=%d, on_established()' % self.id)
-
-        self.access_level = AccessLevel.ESTABLISHED.value
+        self.logger.debug('id=%d, on_established()', self.id)
+        self.access_level = AccessLevel.ESTABLISHED
 
     def on_timeout(self):
         """Called when this session is discovered to no longer be alive.
 
-        This will cause the session to force-close.
+        The session should be killed here.
         """
-        self.logger.debug('id=%d, Session timed out!' % self.id)
+        self.logger.debug('id=%d, Session timed out!', self.id)
         self.close(SessionCloseErrorCode.SESSION_DIED)
 
 
@@ -101,18 +94,18 @@ class DMLSessionBase(SessionBase):
 
     def on_message(self, message):
         """"Overrides `DMLSession.on_message()`."""
-        self.logger.debug('id=%d, on_message(%r)' % (self.id, message.handler))
+        self.logger.debug('id=%d, on_message(%r)', self.id, message.handler)
 
         handler_func = self.handlers.get(message.handler)
         if handler_func is not None:
             handler_func(self, message)
         else:
-            self.logger.warning("id=%d, No handler found: '%s'" % (self.id, message.handler))
+            self.logger.warning("id=%d, No handler found: '%s'", self.id, message.handler)
             # FIXME: self.close(SessionCloseErrorCode.UNHANDLED_APPLICATION_MESSAGE)
 
     def on_invalid_message(self, error):
         """"Overrides `DMLSession.on_invalid_message()`."""
-        self.logger.warning('id=%d, Got an invalid message! (%r)' % (self.id, error))
+        self.logger.warning('id=%d, Got an invalid message! (%r)', self.id, error)
         self.close(SessionCloseErrorCode.INVALID_MESSAGE)
 
 
@@ -125,31 +118,30 @@ class ProtocolBase(asyncio.Protocol):
     def connection_made(self, transport):
         """"Overrides `Protocol.connection_made()`."""
         peername = transport.get_extra_info('peername')
-        self.logger.debug('Connection made: %r, %d' % peername)
+        self.logger.debug('Connection made: %r, %d', peername)
 
     def data_received(self, data):
         """"Overrides `Protocol.data_received()`.
 
         Passes the data off to the session for processing.
         """
-        size = len(data)
-        self.logger.debug('data_received(%r, %d)' % (data, size))
-
         if self.session is not None:
+            size = len(data)
+            self.logger.debug('process_data(%r, %d)', data, size)
             self.session.process_data(data, size)
 
     def connection_lost(self, exc):
         """"Overrides `Protocol.connection_lost()`."""
-        self.logger.debug('Connection lost: %r' % exc)
+        self.logger.debug('Connection lost: %r', exc)
 
 
 class ServerSessionBase(SessionBase):
-    def __init__(self, server, transport,
-                 keep_alive_interval=60.0, ensure_alive_interval=10.0):
-        super().__init__(transport, ensure_alive_interval=ensure_alive_interval)
+    KEEP_ALIVE_INTERVAL = 60.0
+
+    def __init__(self, server, transport):
+        SessionBase.__init__(self, transport)
 
         self.server = server
-        self.keep_alive_interval = keep_alive_interval
 
         self._keep_alive_task = None
 
@@ -157,39 +149,37 @@ class ServerSessionBase(SessionBase):
         """Sends a keep alive packet periodically."""
         while True:
             self.send_keep_alive(self.server.startup_timedelta)
-            await asyncio.sleep(self.keep_alive_interval)
+            await asyncio.sleep(self.KEEP_ALIVE_INTERVAL)
+
+    def close(self, error):
+        """"Overrides `SessionBase.close()`."""
+        if self._keep_alive_task is not None:
+            self._keep_alive_task.cancel()
+            self._keep_alive_task = None
+
+        SessionBase.close(self, error)
 
     def on_established(self):
         """"Overrides `SessionBase.on_established()`.
 
         Starts sending keep alive packets.
         """
-        super().on_established()
+        SessionBase.on_established(self)
 
         # Start sending keep alive packets.
         self._keep_alive_task = asyncio.ensure_future(self._keep_alive())
 
 
 class ServerSession(ServerSessionBase, CServerSession):
-    def __init__(self, server, transport, id,
-                 keep_alive_interval=60.0, ensure_alive_interval=10.0):
-        ServerSessionBase.__init__(
-            self, server, transport,
-            keep_alive_interval=keep_alive_interval,
-            ensure_alive_interval=ensure_alive_interval)
+    def __init__(self, server, transport, id):
+        ServerSessionBase.__init__(self, server, transport)
         CServerSession.__init__(self, id)
 
 
 class ServerDMLSession(DMLSessionBase, ServerSessionBase, CServerDMLSession):
-    def __init__(self, server, transport, id, manager,
-                 keep_alive_interval=60.0, ensure_alive_interval=10.0):
-        DMLSessionBase.__init__(
-            self, transport,
-            ensure_alive_interval=ensure_alive_interval)
-        ServerSessionBase.__init__(
-            self, server, transport,
-            keep_alive_interval=keep_alive_interval,
-            ensure_alive_interval=ensure_alive_interval)
+    def __init__(self, server, transport, id, manager):
+        DMLSessionBase.__init__(self, transport)
+        ServerSessionBase.__init__(self, server, transport)
         CServerDMLSession.__init__(self, id, manager)
 
 
@@ -292,12 +282,12 @@ class DMLServer(Server):
 
 
 class ClientSessionBase(SessionBase):
-    def __init__(self, client, transport,
-                 keep_alive_interval=10.0, ensure_alive_interval=10.0):
-        super().__init__(transport, ensure_alive_interval=ensure_alive_interval)
+    KEEP_ALIVE_INTERVAL = 10.0
+
+    def __init__(self, client, transport):
+        SessionBase.__init__(self, transport)
 
         self.client = client
-        self.keep_alive_interval = keep_alive_interval
 
         self._keep_alive_task = None
 
@@ -305,39 +295,37 @@ class ClientSessionBase(SessionBase):
         """Sends a keep alive packet periodically."""
         while True:
             self.send_keep_alive()
-            await asyncio.sleep(self.keep_alive_interval)
+            await asyncio.sleep(self.KEEP_ALIVE_INTERVAL)
+
+    def close(self, error):
+        """"Overrides `SessionBase.close()`."""
+        if self._keep_alive_task is not None:
+            self._keep_alive_task.cancel()
+            self._keep_alive_task = None
+
+        SessionBase.close(self, error)
 
     def on_established(self):
         """"Overrides `SessionBase.on_established()`.
 
         Starts sending keep alive packets.
         """
-        super().on_established()
+        SessionBase.on_established(self)
 
         # Start sending keep alive packets.
         self._keep_alive_task = asyncio.ensure_future(self._keep_alive())
 
 
 class ClientSession(ClientSessionBase, CClientSession):
-    def __init__(self, client, transport, id,
-                 keep_alive_interval=60.0, ensure_alive_interval=10.0):
-        ClientSessionBase.__init__(
-            self, client, transport,
-            keep_alive_interval=keep_alive_interval,
-            ensure_alive_interval=ensure_alive_interval)
+    def __init__(self, client, transport, id):
+        ClientSessionBase.__init__(self, client, transport)
         CClientSession.__init__(self, id)
 
 
 class ClientDMLSession(DMLSessionBase, ClientSessionBase, CClientDMLSession):
-    def __init__(self, client, transport, id, manager,
-                 keep_alive_interval=60.0, ensure_alive_interval=10.0):
-        DMLSessionBase.__init__(
-            self, transport,
-            ensure_alive_interval=ensure_alive_interval)
-        ClientSessionBase.__init__(
-            self, client, transport,
-            keep_alive_interval=keep_alive_interval,
-            ensure_alive_interval=ensure_alive_interval)
+    def __init__(self, client, transport, id, manager):
+        DMLSessionBase.__init__(self, transport)
+        ClientSessionBase.__init__(self, client, transport)
         CClientDMLSession.__init__(self, id, manager)
 
 
@@ -385,7 +373,7 @@ class Client(object):
         self.session = None
 
     def run(self, event_loop):
-        """Attempts to make a connection."""
+        """Tries to connect to the server."""
         protocol_factory = lambda: self.PROTOCOL_CLS(self)
         coro = event_loop.create_connection(
             protocol_factory, host=self.host, port=self.port)
