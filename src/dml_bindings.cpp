@@ -33,10 +33,10 @@
         &Record::has_field<TYPE>,                   \
         py::arg("name"),                            \
         py::return_value_policy::copy)
-#define DEF_GET_FIELD_METHOD(NAME, TYPE)     \
-    .def(NAME,                               \
-        &Record::get_field<TYPE>,            \
-        py::arg("name"),                     \
+#define DEF_GET_FIELD_METHOD(NAME, TYPE)                                         \
+    .def(NAME,                                                                   \
+        static_cast<Field<TYPE> *(Record::*)(std::string)>(&Record::get_field),  \
+        py::arg("name"),                                                         \
         py::return_value_policy::reference)
 #define DEF_ADD_FIELD_METHOD(NAME, TYPE)     \
     .def(NAME,                               \

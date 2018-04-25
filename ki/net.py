@@ -118,7 +118,7 @@ class ProtocolBase(asyncio.Protocol):
     def connection_made(self, transport):
         """"Overrides `Protocol.connection_made()`."""
         peername = transport.get_extra_info('peername')
-        self.logger.debug('Connection made: %r, %d', peername)
+        self.logger.debug('Connection made: %r', peername)
 
     def data_received(self, data):
         """"Overrides `Protocol.data_received()`.
