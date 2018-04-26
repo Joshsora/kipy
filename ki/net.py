@@ -42,9 +42,13 @@ class SessionBase(object):
         If this session hasn't received any within the allowed time frame, the
         on_timeout() event will be triggered.
         """
-        while True:
+        while self._ensure_alive_task is not None and \
+                not self._ensure_alive_task.cancelled():
+            # Has this session been receiving keep alive packets
+            # periodically? If not, trigger the on_timeout() event.
             if not self.alive:
                 self.on_timeout()
+
             await asyncio.sleep(self.ENSURE_ALIVE_INTERVAL)
 
     def on_invalid_packet(self):
@@ -147,7 +151,8 @@ class ServerSessionBase(SessionBase):
 
     async def _keep_alive(self):
         """Sends a keep alive packet periodically."""
-        while True:
+        while self._keep_alive_task is not None and \
+                not self._keep_alive_task.cancelled():
             self.send_keep_alive(self.server.startup_timedelta)
             await asyncio.sleep(self.KEEP_ALIVE_INTERVAL)
 
@@ -293,7 +298,8 @@ class ClientSessionBase(SessionBase):
 
     async def _keep_alive(self):
         """Sends a keep alive packet periodically."""
-        while True:
+        while self._keep_alive_task is not None and \
+                not self._keep_alive_task.cancelled():
             self.send_keep_alive()
             await asyncio.sleep(self.KEEP_ALIVE_INTERVAL)
 
