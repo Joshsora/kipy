@@ -23,6 +23,11 @@
 #include <ki/protocol/control/ClientKeepAlive.h>
 #include <ki/protocol/control/SessionAccept.h>
 
+// Disable inheritance via dominance warning
+#if _MSC_VER
+#pragma warning(disable: 4250)
+#endif
+
 #define DEF_SET_FIELD_VALUE_METHOD(NAME, TYPE)    \
     .def(NAME,                                    \
         &MessageBuilder::set_field_value<TYPE>,   \
@@ -887,3 +892,8 @@ PYBIND11_MODULE(protocol, m)
 
     // Submodule: control (end)
 }
+
+// Re-enable inheritance via dominance warning
+#if _MSC_VER
+#pragma warning(default: 4250)
+#endif
