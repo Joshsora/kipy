@@ -4,11 +4,10 @@ import time
 from enum import IntEnum
 
 from .protocol.dml import MessageManager
-from .protocol.net import ServerSession as CServerSession, \
-    ClientSession as CClientSession, \
-    ServerDMLSession as CServerDMLSession, \
-    ClientDMLSession as CClientDMLSession, \
-    SessionCloseErrorCode
+from .protocol.net import SessionCloseErrorCode, \
+    ServerSession as CServerSession, ClientSession as CClientSession, \
+    ServerDMLSession as CServerDMLSession, ClientDMLSession as CClientDMLSession
+from .tasks import TaskParticipant, TaskSignal, asyncio_task
 from .util import IDAllocator, AllocationError
 
 
@@ -26,30 +25,36 @@ class AccessLevel(IntEnum):
     AUTHENTICATED = 2
 
 
-class SessionBase(object):
+class SessionBase(TaskParticipant):
     logger = logging.getLogger('SESSION')
 
     ENSURE_ALIVE_INTERVAL = 10.0
+    KEEP_ALIVE_INTERVAL = 10.0
 
     def __init__(self, transport):
         self.transport = transport
 
-        self._ensure_alive_task = asyncio.ensure_future(self._ensure_alive())
+        self._ensure_alive.start(delay=self.ENSURE_ALIVE_INTERVAL)
 
-    async def _ensure_alive(self):
-        """Ensure this session has been receiving keep alive packets periodically.
+    @asyncio_task
+    def _ensure_alive(self):
+        """Ensures that this session has been receiving keep alive packets.
 
-        If this session hasn't received any within the allowed time frame, the
+        If none have been received within the allowed time frame, then the
         on_timeout() event will be triggered.
         """
-        while self._ensure_alive_task is not None and \
-                not self._ensure_alive_task.cancelled():
-            # Has this session been receiving keep alive packets
-            # periodically? If not, trigger the on_timeout() event.
-            if not self.alive:
-                self.on_timeout()
+        if not self.alive:
+            self.on_timeout()
+        return TaskSignal.AGAIN
 
-            await asyncio.sleep(self.ENSURE_ALIVE_INTERVAL)
+    @asyncio_task
+    def _keep_alive(self):
+        """Sends a keep alive packet periodically.
+
+        This should be overridden by subclasses to perform the correct
+        behavior.
+        """
+        return TaskSignal.DONE
 
     def on_invalid_packet(self):
         """"Overrides `Session.on_invalid_packet()`."""
@@ -64,9 +69,8 @@ class SessionBase(object):
 
     def close(self, error):
         """"Overrides `Session.close()`."""
-        if self._ensure_alive_task is not None:
-            self._ensure_alive_task.cancel()
-            self._ensure_alive_task = None
+        # Stop all of our managed asyncio tasks.
+        self.stop_tasks()
 
         if self.transport is not None:
             # close() may be called more than once.
@@ -77,17 +81,19 @@ class SessionBase(object):
             self.transport = None
 
     def on_established(self):
-        """"Overrides `Session.on_established()`.
-
-        Sets the access level to `AccessLevel.ESTABLISHED`.
-        """
+        """"Overrides `Session.on_established()`."""
         self.logger.debug('id=%d, on_established()', self.id)
+
+        # Set our access level to ESTABLISHED.
         self.access_level = AccessLevel.ESTABLISHED
+
+        # Start sending keep alive packets.
+        self._keep_alive.start(delay=self.KEEP_ALIVE_INTERVAL)
 
     def on_timeout(self):
         """Called when this session is discovered to no longer be alive.
 
-        The session should be killed here.
+        The session should typically be killed here.
         """
         self.logger.debug('id=%d, Session timed out!', self.id)
         self.close(SessionCloseErrorCode.SESSION_DIED)
@@ -100,12 +106,11 @@ class DMLSessionBase(SessionBase):
         """"Overrides `DMLSession.on_message()`."""
         self.logger.debug('id=%d, on_message(%r)', self.id, message.handler)
 
-        handler_func = self.handlers.get(message.handler)
+        handler_func = DMLSessionBase.handlers.get(message.handler)
         if handler_func is not None:
             handler_func(self, message)
         else:
             self.logger.warning("id=%d, No handler found: '%s'", self.id, message.handler)
-            # FIXME: self.close(SessionCloseErrorCode.UNHANDLED_APPLICATION_MESSAGE)
 
     def on_invalid_message(self, error):
         """"Overrides `DMLSession.on_invalid_message()`."""
@@ -146,33 +151,19 @@ class ServerSessionBase(SessionBase):
         SessionBase.__init__(self, transport)
 
         self.server = server
+        self.server.add_session(self)
 
-        self._keep_alive_task = None
-
-    async def _keep_alive(self):
+    @asyncio_task
+    def _keep_alive(self):
         """Sends a keep alive packet periodically."""
-        while self._keep_alive_task is not None and \
-                not self._keep_alive_task.cancelled():
-            self.send_keep_alive(self.server.startup_timedelta)
-            await asyncio.sleep(self.KEEP_ALIVE_INTERVAL)
+        self.send_keep_alive(self.server.startup_time_delta)
+        return TaskSignal.AGAIN
 
     def close(self, error):
         """"Overrides `SessionBase.close()`."""
-        if self._keep_alive_task is not None:
-            self._keep_alive_task.cancel()
-            self._keep_alive_task = None
-
         SessionBase.close(self, error)
 
-    def on_established(self):
-        """"Overrides `SessionBase.on_established()`.
-
-        Starts sending keep alive packets.
-        """
-        SessionBase.on_established(self)
-
-        # Start sending keep alive packets.
-        self._keep_alive_task = asyncio.ensure_future(self._keep_alive())
+        self.server.remove_session(self)
 
 
 class ServerSession(ServerSessionBase, CServerSession):
@@ -249,7 +240,7 @@ class Server(object):
         self.sessions = {}
 
     @property
-    def startup_timedelta(self):
+    def startup_time_delta(self):
         """Returns the time that has elapsed since startup.
 
         This value will be in milliseconds.
@@ -262,11 +253,24 @@ class Server(object):
         coro = event_loop.create_server(protocol_factory, port=self.port)
         event_loop.run_until_complete(coro)
 
+    def close(self):
+        """Closes all sessions."""
+        for session in self.sessions.copy().values():
+            session.close(SessionCloseErrorCode.SESSION_DIED)
+
+    def add_session(self, session):
+        """Adds the given session to our managed sessions."""
+        self.sessions[session.id] = session
+
+    def remove_session(self, session):
+        """Removes the given session from our managed sessions."""
+        if session.id in self.sessions:
+            del self.sessions[session.id]
+
     def create_session(self, transport):
         """Returns a new session."""
         session_id = self.session_id_allocator.allocate()
         session = self.SESSION_CLS(self, transport, session_id)
-        self.sessions[session_id] = session
         return session
 
 
@@ -282,7 +286,6 @@ class DMLServer(Server):
         """Returns a new session."""
         session_id = self.session_id_allocator.allocate()
         session = self.SESSION_CLS(self, transport, session_id, self.message_manager)
-        self.sessions[session_id] = session
         return session
 
 
@@ -293,33 +296,19 @@ class ClientSessionBase(SessionBase):
         SessionBase.__init__(self, transport)
 
         self.client = client
+        self.client.session = self
 
-        self._keep_alive_task = None
-
-    async def _keep_alive(self):
+    @asyncio_task
+    def _keep_alive(self):
         """Sends a keep alive packet periodically."""
-        while self._keep_alive_task is not None and \
-                not self._keep_alive_task.cancelled():
-            self.send_keep_alive()
-            await asyncio.sleep(self.KEEP_ALIVE_INTERVAL)
+        self.send_keep_alive()
+        return TaskSignal.AGAIN
 
     def close(self, error):
         """"Overrides `SessionBase.close()`."""
-        if self._keep_alive_task is not None:
-            self._keep_alive_task.cancel()
-            self._keep_alive_task = None
-
         SessionBase.close(self, error)
 
-    def on_established(self):
-        """"Overrides `SessionBase.on_established()`.
-
-        Starts sending keep alive packets.
-        """
-        SessionBase.on_established(self)
-
-        # Start sending keep alive packets.
-        self._keep_alive_task = asyncio.ensure_future(self._keep_alive())
+        self.client.session = None
 
 
 class ClientSession(ClientSessionBase, CClientSession):
@@ -385,11 +374,13 @@ class Client(object):
             protocol_factory, host=self.host, port=self.port)
         event_loop.run_until_complete(coro)
 
+    def close(self):
+        """Closes the session."""
+        self.session.close(SessionCloseErrorCode.SESSION_DIED)
+
     def create_session(self, transport):
         """Returns a new session."""
-        session = self.SESSION_CLS(self, transport, 0)
-        self.session = session
-        return session
+        return self.SESSION_CLS(self, transport, 0)
 
 
 class DMLClient(Client):
@@ -402,6 +393,4 @@ class DMLClient(Client):
 
     def create_session(self, transport):
         """Returns a new session."""
-        session = self.SESSION_CLS(self, transport, 0, self.message_manager)
-        self.session = session
-        return session
+        return self.SESSION_CLS(self, transport, 0, self.message_manager)

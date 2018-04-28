@@ -1,6 +1,11 @@
 from enum import Enum
 
 
+class ErrorCodeEnum(Enum):
+    def __repr__(self):
+        return '%s.%s' % (self.__class__.__name__, self.name)
+
+
 def format_error_message(code=None, reason=None, recommendation=None):
     """Format an error message for logging."""
     message = ''
@@ -21,8 +26,3 @@ def format_error_message(code=None, reason=None, recommendation=None):
         message += 'Recommendation:\n\t%s\n' % recommendation
 
     return message
-
-
-class ErrorCodeEnum(Enum):
-    def __repr__(self):
-        return '%s.%s' % (self.__class__.__name__, self.name)
