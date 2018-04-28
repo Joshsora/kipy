@@ -705,7 +705,12 @@ PYBIND11_MODULE(protocol, m)
 
     // Enum: InvalidDMLMessageErrorCode
     py::enum_<InvalidDMLMessageErrorCode>(m_net, "InvalidDMLMessageErrorCode")
+        .value("NONE", InvalidDMLMessageErrorCode::NONE)
+        .value("UNKNOWN", InvalidDMLMessageErrorCode::UNKNOWN)
+        .value("INVALID_HEADER_DATA", InvalidDMLMessageErrorCode::INVALID_HEADER_DATA)
         .value("INVALID_MESSAGE_DATA", InvalidDMLMessageErrorCode::INVALID_MESSAGE_DATA)
+        .value("INVALID_SERVICE", InvalidDMLMessageErrorCode::INVALID_SERVICE)
+        .value("INVALID_MESSAGE_TYPE", InvalidDMLMessageErrorCode::INVALID_MESSAGE_TYPE)
         .value("INSUFFICIENT_ACCESS", InvalidDMLMessageErrorCode::INSUFFICIENT_ACCESS);
 
     // Class: DMLSession
