@@ -1,4 +1,3 @@
-import copy
 import pytest
 from ki.config import ConfigError, Config, ConfigCategory, ConfigVar
 
@@ -121,11 +120,12 @@ def test_valid_data(sample_config, sample_data):
 
 
 def test_invalid_data(sample_config, sample_data):
-    # Missing variables.
-    data = copy.deepcopy(sample_data)
-    del data['category-a']['var-3']
-    del data['category-a']['category-b']
-    missing_vars = sample_config.load_dict(data)
+    # Delete some data.
+    del sample_data['category-a']['var-3']
+    del sample_data['category-a']['category-b']
+
+    # Test for missing variables.
+    missing_vars = sample_config.load_dict(sample_data)
     category_a = sample_config.categories['category-a']
     assert category_a.vars['var-1'] not in missing_vars
     assert category_a.vars['var-2'] not in missing_vars
@@ -138,20 +138,15 @@ def test_invalid_data(sample_config, sample_data):
 
     # When a value does not match the required type, then an exit code of
     # `ConfigError.INVALID_TYPE` should be given.
-    data = copy.deepcopy(sample_data)
-    data['category-a']['category-b']['var-4'] = 'test'
     with pytest.raises(SystemExit) as e:
-        sample_config.load_dict(data)
+        category_b.vars['var-4'].value = 'test'
     assert e.value.code == ConfigError.INVALID_TYPE
 
     # When a value does not meet the constraints, then an exit code of
     # `ConfigError.INVALID_VALUE` should be given.
-    data = copy.deepcopy(sample_data)
-    data['category-a']['category-b']['var-4'] = 0xFFFF
     with pytest.raises(SystemExit) as e:
-        sample_config.load_dict(data)
+        category_b.vars['var-4'].value = 0xFF + 1
     assert e.value.code == ConfigError.INVALID_VALUE
-
 
 
 def test_yaml_file(sample_config):
