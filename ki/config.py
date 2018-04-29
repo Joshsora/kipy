@@ -280,7 +280,16 @@ class ConfigCategory(ConfigNode):
 
         # Find the variable, and return its value.
         try:
-            return category[var_name]
+            value = category[var_name]
+            if value is None:
+                error_message = format_error_message(
+                    code=ConfigError.MISSING_DATA,
+                    reason='No value has been set for variable with '
+                           'path: %r' % path,
+                    recommendation='Contact the developers.')
+                self.logger.error(error_message)
+                sys.exit(ConfigError.MISSING_DATA)
+            return value
         except (KeyError, AttributeError):
             error_message = format_error_message(
                 code=ConfigError.INVALID_PATH,
@@ -295,10 +304,8 @@ class ConfigCategory(ConfigNode):
         All of the variables belonging to this category, and each child
         category will be set.
 
-        Returns any missing data in the form of:
-            (missing_categories, missing_vars)
+        Returns any missing variables.
         """
-        missing_categories = []
         missing_vars = []
 
         # Load the variable values.
@@ -322,15 +329,17 @@ class ConfigCategory(ConfigNode):
                     # missing.
                     if _var.default is None:
                         missing_vars.append(_var)
+
+                # Let's also go through the child categories.
+                for _name, _category in category.categories.items():
+                    missing_vars.extend(_category.load_dict({}))
             else:
                 # Load the category.
-                # If this category is found to be missing data, then add it to
-                # our missing data for the final report.
-                _missing_categories, _missing_vars = category.load_dict(category_data)
-                missing_categories.extend(_missing_categories)
-                missing_vars.extend(_missing_vars)
+                # If this category is found to be missing variables, then add
+                # them to our list of missing variables for the final report.
+                missing_vars.extend(category.load_dict(category_data))
 
-        return missing_categories, missing_vars
+        return missing_vars
 
     def load_yaml_file(self, filename):
         """Loads values from the given YAML file.
@@ -365,27 +374,20 @@ class ConfigCategory(ConfigNode):
             self.logger.error(error_message)
             sys.exit(ConfigError.INVALID_DATA)
 
-        missing_categories, missing_vars = self.load_dict(data)
-        if missing_categories or missing_vars:
+        missing_vars = self.load_dict(data)
+        if missing_vars:
             error_reason = 'Failed to load config data.'
 
-            # Add the missing categories to the error reason.
-            if missing_categories:
-                error_reason += '\nMissing categories:\n'
-                for category in missing_categories:
-                    error_reason += '\t%r\n' % category
-
             # Add the missing variables to the error reason.
-            if missing_vars:
-                error_reason += '\nMissing variables:\n'
-                for var in missing_vars:
-                    error_reason += '\t%r\n' % var
+            error_reason += '\nMissing variables:\n'
+            for var in missing_vars:
+                error_reason += '\t%r\n' % var
 
             error_message = format_error_message(
                 code=ConfigError.MISSING_DATA,
                 reason=error_reason,
-                recommendation='Verify that these values exist in your config '
-                               'file.')
+                recommendation='Verify that these values are present in your '
+                               'config file.')
             self.logger.error(error_message)
             sys.exit(ConfigError.MISSING_DATA)
 
