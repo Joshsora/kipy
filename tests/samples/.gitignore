@@ -1,3 +1,6 @@
 *
 !.gitignore
 !dml.bin
+!config.yml
+!empty_config.yml
+!invalid_config.yml

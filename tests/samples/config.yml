@@ -1,0 +1,8 @@
+category-a:
+    var-1: 1
+    var-2: 2
+    var-3: 3
+    category-b:
+        var-1: 1
+        var-2: 2
+        var-3: 3
