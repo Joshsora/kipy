@@ -44,19 +44,15 @@ class Task(object):
 
     def start(self, delay=None, args=None):
         """Starts the task."""
-        if self.running:
-            return
-
-        Task.running_tasks[self.name] = \
-            asyncio.ensure_future(self._tick(delay=delay, args=args))
+        if not self.running:
+            Task.running_tasks[self.name] = \
+                asyncio.ensure_future(self._tick(delay=delay, args=args))
 
     def stop(self):
         """Stops the task."""
-        if not self.running:
-            return
-
-        asyncio_task = Task.running_tasks.pop(self.name)
-        asyncio_task.cancel()
+        if self.running:
+            asyncio_task = Task.running_tasks.pop(self.name)
+            asyncio_task.cancel()
 
     async def _tick(self, delay=None, args=None):
         try:

@@ -34,6 +34,8 @@ class SessionBase(TaskParticipant):
     def __init__(self, transport):
         self.transport = transport
 
+        self._close_handlers = []
+
         self._ensure_alive.start(delay=self.ENSURE_ALIVE_INTERVAL)
 
     @asyncio_task
@@ -69,16 +71,25 @@ class SessionBase(TaskParticipant):
 
     def close(self, error):
         """"Overrides `Session.close()`."""
+        # close() might be called more than once.
+        # For this reason, we only take action if our connection is alive.
+        if self.transport is None:
+            return
+
+        self.logger.debug('id=%d, close(%r)', self.id, error)
+
         # Stop all of our managed asyncio tasks.
         self.stop_tasks()
 
-        if self.transport is not None:
-            # close() may be called more than once.
-            # For this reason, we only log when the transport gets closed.
-            self.logger.debug('id=%d, close(%r)', self.id, error)
+        # Invoke our close handlers.
+        for close_handler in self._close_handlers:
+            close_handler()
 
-            self.transport.close()
-            self.transport = None
+        self._close_handlers = []
+
+        # Close the connection.
+        self.transport.close()
+        self.transport = None
 
     def on_established(self):
         """"Overrides `Session.on_established()`."""
@@ -97,6 +108,24 @@ class SessionBase(TaskParticipant):
         """
         self.logger.debug('id=%d, Session timed out!', self.id)
         self.close(SessionCloseErrorCode.SESSION_DIED)
+
+    def add_close_handler(self, func):
+        """Adds the given function to this session's close handlers.
+
+        A close handler is called immediately before the session's connection
+        is closed.
+        """
+        if func not in self._close_handlers:
+            self._close_handlers.append(func)
+
+    def remove_close_handler(self, func):
+        """Removes the given function from this session's close handlers.
+
+        A close handler is called immediately before the session's connection
+        is closed.
+        """
+        if func in self._close_handlers:
+            self._close_handlers.remove(func)
 
 
 class DMLSessionBase(SessionBase):
