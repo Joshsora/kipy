@@ -151,7 +151,6 @@ class ServerSessionBase(SessionBase):
         SessionBase.__init__(self, transport)
 
         self.server = server
-        self.server.add_session(self)
 
     @asyncio_task
     def _keep_alive(self):
@@ -163,7 +162,7 @@ class ServerSessionBase(SessionBase):
         """"Overrides `SessionBase.close()`."""
         SessionBase.close(self, error)
 
-        self.server.remove_session(self)
+        self.server.on_session_closed(self)
 
 
 class ServerSession(ServerSessionBase, CServerSession):
@@ -258,11 +257,7 @@ class Server(object):
         for session in self.sessions.copy().values():
             session.close(SessionCloseErrorCode.SESSION_DIED)
 
-    def add_session(self, session):
-        """Adds the given session to our managed sessions."""
-        self.sessions[session.id] = session
-
-    def remove_session(self, session):
+    def on_session_closed(self, session):
         """Removes the given session from our managed sessions."""
         if session.id in self.sessions:
             del self.sessions[session.id]
@@ -271,6 +266,7 @@ class Server(object):
         """Returns a new session."""
         session_id = self.session_id_allocator.allocate()
         session = self.SESSION_CLS(self, transport, session_id)
+        self.sessions[session.id] = session
         return session
 
 
