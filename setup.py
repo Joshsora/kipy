@@ -71,6 +71,14 @@ with open(version_path, 'r', encoding='utf-8') as f:
 with open('README.rst', 'r', encoding='utf-8') as f:
     long_description = f.read()
 
+
+setup_requires = ['pytest-runner']
+install_requires = ['ruamel.yaml>=0.15.35']
+tests_require = ['pytest>=3.0.0']
+
+if platform.system() != 'Windows':
+    install_requires.append('uvloop>=0.9.1')
+
 setup(
     name=about['__title__'],
     version=about['__version__'],
@@ -86,7 +94,7 @@ setup(
         'build_ext': CMakeBuild
     },
     zip_safe=False,
-    setup_requires=['pytest-runner'],
-    install_requires=['pyuv>=1.4.0'],
-    tests_require=['pytest>=3.0.0']
+    setup_requires=setup_requires,
+    install_requires=install_requires,
+    tests_require=tests_require
 )

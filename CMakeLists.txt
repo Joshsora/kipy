@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.1)
 project(kipy)
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 add_subdirectory(dependencies/libki)
 add_subdirectory(dependencies/pybind11)
 
