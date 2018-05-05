@@ -125,6 +125,13 @@ PYBIND11_MODULE(dml, m)
     DEF_FIELD_CLASS("IntField", INT);
     DEF_FIELD_CLASS("UIntField", UINT);
     DEF_FIELD_CLASS("StrField", STR);
+        .def_property("value_bytes",
+            [](const StrField &self)
+            {
+                return py::bytes(self.get_value());
+            },
+            static_cast<void (StrField::*)(STR)>(&StrField::set_value),
+            py::return_value_policy::copy);
     DEF_FIELD_CLASS("WStrField", WSTR);
     DEF_FIELD_CLASS("FltField", FLT);
     DEF_FIELD_CLASS("DblField", DBL);
