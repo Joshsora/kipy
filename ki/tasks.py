@@ -10,11 +10,11 @@ class TaskSignal(Enum):
 
 
 class Task(object):
-    """
-    A representation of a task that is bound to a TaskParticipant
-    instance. A task will invoke its tick behavior every frame until
-    it is finished. Upon finishing, it will invoke its cleanup
-    behavior.
+    """A representation of a task that is bound to a TaskParticipant
+    instance.
+
+    A task will invoke its tick behavior every frame until it is
+    finished. Upon finishing, it will invoke its cleanup behavior.
     """
     running_tasks = {}
 
@@ -33,7 +33,7 @@ class Task(object):
     def asyncio_task(self):
         """Returns the underlying `asyncio.Task` object.
 
-        If this task isn't running, `None` will be returned instead.
+        If the task isn't running, `None` will be returned instead.
         """
         return Task.running_tasks.get(self.name)
 
@@ -83,10 +83,11 @@ class Task(object):
 
 
 class TaskDecorator(object):
-    """
-    A decorator used to define a new task, with the decorated method as
-    its tick behavior. If you wish to go further and define its cleanup
-    behavior, use `TaskDecorator.cleanup`.
+    """A decorator that can be used to define a new task, with the
+    decorated method as its tick behavior.
+
+    If you wish to go further and define its cleanup behavior, use
+    `TaskDecorator.cleanup`.
     """
 
     def __init__(self, tick_func, cleanup_func=None):
@@ -94,7 +95,7 @@ class TaskDecorator(object):
         self._cleanup_func = cleanup_func
 
     def __get__(self, obj, objtype=None):
-        # Someone invoked `obj.state`. Assuming that `obj` is an
+        # Someone invoked `obj.attr`. Assuming that `obj` is an
         # instance of `TaskParticipant`, return a new `Task` instance.
         # This `Task` instance will be bound to `obj` for its
         # lifetime.
@@ -103,13 +104,13 @@ class TaskDecorator(object):
         return self
 
     def tick(self, func):
-        """A decorator used to define this task's tick behavior."""
+        """A decorator that can be used to define this task's tick behavior."""
         # Return a copy of this `TaskDecorator` instance, with the
         # decorated function as the `tick_func`.
         return type(self)(func, cleanup_func=self._cleanup_func)
 
     def cleanup(self, func):
-        """A decorator used to define this task's cleanup behavior."""
+        """A decorator that can be used to define this task's cleanup behavior."""
         # Return a copy of this `TaskDecorator` instance, with the
         # decorated function as the `cleanup_func`.
         return type(self)(self._tick_func, cleanup_func=func)
@@ -119,11 +120,11 @@ asyncio_task = TaskDecorator  # Alias
 
 
 class TaskParticipant(object):
-    """The base for any class that wishes to create a managed asyncio task."""
+    """The base for any class that wishes to house a managed asyncio task."""
 
     def iter_tasks(self):
-        """A generator used to iterate over all of the tasks that
-        belong to this instance.
+        """A generator that can be used to iterate over all of the
+        tasks that belong to this instance.
         """
         for name in dir(self):
             attr = getattr(self, name)
