@@ -5,6 +5,7 @@ import subprocess
 import sys
 from distutils.version import LooseVersion
 
+from Cython.Build import cythonize
 from setuptools import setup, find_packages, Extension
 from setuptools.command.build_ext import build_ext
 
@@ -18,20 +19,32 @@ class CMakeExtension(Extension):
 
 class CMakeBuild(build_ext):
     def run(self):
-        try:
-            out = subprocess.check_output(['cmake', '--version'])
-        except OSError:
-            raise RuntimeError(
-                'CMake must be installed to build the following extensions: ' +
-                ', '.join(e.name for e in self.extensions))
-
-        if platform.system() == 'Windows':
-            cmake_version = LooseVersion(re.search(r'version\s*([\d.]+)', out.decode()).group(1))
-            if cmake_version < '3.1.0':
-                raise RuntimeError('CMake >= 3.1.0 is required on Windows')
-
+        cmake_extensions = []
         for ext in self.extensions:
-            self.build_extension(ext)
+            cmake_extensions.append(ext)
+
+        if cmake_extensions:
+            try:
+                out = subprocess.check_output(['cmake', '--version'])
+            except OSError:
+                raise RuntimeError(
+                    'CMake must be installed to build the following extensions: ' +
+                    ', '.join(ext.name for ext in cmake_extensions))
+
+            if platform.system() == 'Windows':
+                cmake_version = LooseVersion(
+                    re.search(r'version\s*([\d.]+)', out.decode()).group(1))
+                if cmake_version < '3.1.0':
+                    raise RuntimeError('CMake >= 3.1.0 is required on Windows')
+
+        build_ext.run(self)
+
+    def build_extensions(self):
+        for ext in self.extensions:
+            if isinstance(ext, CMakeExtension):
+                self.build_extension(ext)
+            else:
+                build_ext.build_extension(self, ext)
 
     def build_extension(self, ext):
         ext_dir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
@@ -89,7 +102,8 @@ setup(
     ext_modules=[
         CMakeExtension('ki.dml'),
         CMakeExtension('ki.protocol')
-    ],
+
+    ] + cythonize('ki/*.pyx'),
     cmdclass={
         'build_ext': CMakeBuild
     },

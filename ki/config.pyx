@@ -6,7 +6,7 @@ import textwrap
 
 from ruamel import yaml
 
-from .logging import ErrorCodeEnum, format_error_message
+from .util import ErrorCodeEnum, format_error_message
 
 
 class ConfigError(ErrorCodeEnum):
