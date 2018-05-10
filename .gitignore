@@ -23,7 +23,7 @@ wheels/
 *.egg
 
 # Cython
-*.c
+ki/*.c
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -54,3 +54,6 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# PyCharm project settings
+.idea
