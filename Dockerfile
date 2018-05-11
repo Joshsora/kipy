@@ -1,8 +1,9 @@
 FROM python:3.6.5-alpine as kipy-builder
-COPY . /
-RUN apk add --update gcc g++ libc-dev make cmake
+RUN apk add --no-cache gcc g++ libc-dev make cmake
 RUN pip install Cython
+COPY . /
 RUN python setup.py install
+RUN pip uninstall Cython
 
 FROM python:3.6.5-alpine
 RUN apk add --no-cache libstdc++
