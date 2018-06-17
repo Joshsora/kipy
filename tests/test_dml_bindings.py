@@ -1,9 +1,10 @@
 import pytest
 
+from ki.dml import Record
+
 
 @pytest.fixture
 def record():
-    from ki.dml import Record
     return Record()
 
 
