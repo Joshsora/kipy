@@ -5,7 +5,6 @@ import subprocess
 import sys
 from distutils.version import LooseVersion
 
-from Cython.Build import cythonize
 from setuptools import setup, find_packages, Extension
 from setuptools.command.build_ext import build_ext
 
@@ -103,7 +102,7 @@ setup(
         CMakeExtension('ki.dml'),
         CMakeExtension('ki.protocol')
 
-    ] + cythonize('ki/*.pyx'),
+    ],
     cmdclass={
         'build_ext': CMakeBuild
     },
