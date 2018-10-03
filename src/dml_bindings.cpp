@@ -74,6 +74,19 @@ PYBIND11_MODULE(dml, m)
     py::register_exception<parse_error>(m, "DMLParseError");
     py::register_exception<value_error>(m, "DMLValueError");
 
+    // Classes: *Field
+    DEF_FIELD_CLASS("BytField", BYT);
+    DEF_FIELD_CLASS("UBytField", UBYT);
+    DEF_FIELD_CLASS("ShrtField", SHRT);
+    DEF_FIELD_CLASS("UShrtField", USHRT);
+    DEF_FIELD_CLASS("IntField", INT);
+    DEF_FIELD_CLASS("UIntField", UINT);
+    DEF_FIELD_CLASS("StrField", STR);
+    DEF_FIELD_CLASS("WStrField", WSTR);
+    DEF_FIELD_CLASS("FltField", FLT);
+    DEF_FIELD_CLASS("DblField", DBL);
+    DEF_FIELD_CLASS("GidField", GID);
+
     // Class: Record
     py::class_<Record>(m, "Record")
 
@@ -113,6 +126,15 @@ PYBIND11_MODULE(dml, m)
         // Property: size (read-only)
         .def_property_readonly("size", &Record::get_size,
             py::return_value_policy::copy)
+
+        // Property: value_bytes
+        // .def_property("value_bytes",
+        //     [](const StrField &self)
+        //     {
+        //         return py::bytes(self.get_value());
+        //     },
+        //     static_cast<void (StrField::*)(STR)>(&StrField::set_value),
+        //     py::return_value_policy::copy)
 
         // Methods: has_*_field()
         DEF_HAS_FIELD_METHOD("has_byt_field", BYT)
@@ -155,24 +177,4 @@ PYBIND11_MODULE(dml, m)
         DEF_TO_BYTES_EXTENSION(Record)
         // Extension: from_bytes()
         DEF_FROM_BYTES_EXTENSION(Record);
-
-    // Classes: *Field
-    DEF_FIELD_CLASS("BytField", BYT);
-    DEF_FIELD_CLASS("UBytField", UBYT);
-    DEF_FIELD_CLASS("ShrtField", SHRT);
-    DEF_FIELD_CLASS("UShrtField", USHRT);
-    DEF_FIELD_CLASS("IntField", INT);
-    DEF_FIELD_CLASS("UIntField", UINT);
-    DEF_FIELD_CLASS("StrField", STR);
-        .def_property("value_bytes",
-            [](const StrField &self)
-            {
-                return py::bytes(self.get_value());
-            },
-            static_cast<void (StrField::*)(STR)>(&StrField::set_value),
-            py::return_value_policy::copy);
-    DEF_FIELD_CLASS("WStrField", WSTR);
-    DEF_FIELD_CLASS("FltField", FLT);
-    DEF_FIELD_CLASS("DblField", DBL);
-    DEF_FIELD_CLASS("GidField", GID);
 }
