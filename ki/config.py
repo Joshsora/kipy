@@ -164,8 +164,8 @@ class Config(object):
         except IOError as e:
             raise UserError(name='Config/IOError',
                             description='Failed to read the config file.',
-                            solution='Make sure the file exists: %r\n'
-                                     'Runtime info:\n%d: %s' % (path, e.errno, e.strerror))
+                            solution='Make sure that it exists: %r\n'
+                                     'Runtime info:\n\t%d: %s' % (path, e.errno, e.strerror))
 
         try:
             data = yaml.safe_load(data)
@@ -187,7 +187,7 @@ class Config(object):
         if not isinstance(data, dict):
             raise UserError(name='Config/ParseError',
                             description='Failed to parse the data provided in the config file.',
-                            solution='Verify that the file is not empty.')
+                            solution='Verify that the file is not empty, and contains valid data.')
 
         self.load_dict(data)
 
