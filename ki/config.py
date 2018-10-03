@@ -23,6 +23,7 @@ class ConfigVariable(object):
         self.path = path
         self.description = description
         self.type = type
+        self.default = default
         self.constraint = constraint
 
         if constraint is not None and not callable(constraint):
@@ -140,7 +141,7 @@ class Config(object):
             value = group.get(variable_name)
             if value is not None:
                 variable.value = value
-            else:
+            elif variable.default is None:
                 missing_variables.append(variable)
 
         if missing_variables:
