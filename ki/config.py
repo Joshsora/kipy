@@ -135,7 +135,9 @@ class Config(object):
             # Find the group.
             group = data
             for group_name in group_names:
-                group = group.get(group_name, {})
+                group = group.get(group_name)
+                if not isinstance(group, dict):
+                    group = {}
 
             # Find the value.
             value = group.get(variable_name)
