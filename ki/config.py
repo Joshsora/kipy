@@ -108,6 +108,12 @@ class Config(object):
                 return True
         return False
 
+    def clear_definitions(self):
+        """
+        Clears all variable definitions.
+        """
+        self.variables = []
+
     def get(self, path):
         """
         Returns the value of the variable using the given path.
@@ -195,12 +201,21 @@ class Config(object):
         self.load_dict(data)
 
 
-# Create a global config instance
+# Create a global config instance.
 _config = Config()
 
-# Copy over the interface methods
+# Copy over the interface methods.
 define = _config.define
 is_defined = _config.is_defined
+clear_definitions = _config.clear_definitions
 get = _config.get
 load_dict = _config.load_dict
 load_yaml_file = _config.load_yaml_file
+
+
+def get_variables():
+    """
+    A utility function for getting a list of the currently defined
+    config variables.
+    """
+    return _config.variables.copy()

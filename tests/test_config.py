@@ -29,7 +29,7 @@ def sample_config():
     yield config
 
     # Clear our variable definitions
-    config._config.variables = []
+    config.clear_definitions()
 
 
 @pytest.fixture
@@ -65,7 +65,6 @@ def test_get(sample_config):
 
 
 def test_valid_data(sample_config, sample_data):
-    print(config._config.variables)
     sample_config.load_dict(sample_data)
     assert sample_config.get('group-a/var-1') == 1
     assert sample_config.get('group-a/var-2') == 2
@@ -89,14 +88,14 @@ def test_invalid_data(sample_config, sample_data):
     # When a value does not match the required type, then a UserError
     # should be raised.
     with pytest.raises(UserError):
-        for variable in sample_config._config.variables:
+        for variable in sample_config.get_variables():
             if variable.path == 'group-a/group-b/var-4':
                 variable.value = 'test'
 
     # When a value does not meet the constraint requirements, then a
     # UserError should be raised.
     with pytest.raises(UserError):
-        for variable in sample_config._config.variables:
+        for variable in sample_config.get_variables():
             if variable.path == 'group-a/group-b/var-4':
                 variable.value = 0xFF + 1
 
