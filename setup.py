@@ -80,7 +80,7 @@ version_path = os.path.join(cwd, 'ki', '__version__.py')
 with open(version_path, 'r', encoding='utf-8') as f:
     exec(f.read(), about)
 
-with open('README.rst', 'r', encoding='utf-8') as f:
+with open('README.md', 'r', encoding='utf-8') as f:
     long_description = f.read()
 
 
