@@ -1,6 +1,7 @@
 [submodule "dependencies/libki"]
 	path = dependencies/libki
 	url = https://github.com/Joshsora/libki.git
+	branch = feature/object-property
 [submodule "dependencies/pybind11"]
 	path = dependencies/pybind11
 	url = https://github.com/pybind/pybind11.git
