@@ -1,7 +1,7 @@
 import logging
 import weakref
 
-from .protocol.dml import MessageManager
+from .lib.protocol.dml import MessageManager
 
 
 class MessageHandler(object):

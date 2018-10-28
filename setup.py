@@ -99,8 +99,9 @@ setup(
     long_description=long_description,
     packages=find_packages(),
     ext_modules=[
-        CMakeExtension('ki.dml'),
-        CMakeExtension('ki.protocol')
+        CMakeExtension('ki/lib/util'),
+        CMakeExtension('ki/lib/dml'),
+        CMakeExtension('ki/lib/protocol')
 
     ],
     cmdclass={

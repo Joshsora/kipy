@@ -3,8 +3,8 @@ import logging
 import time
 from enum import IntEnum
 
-from .protocol.dml import MessageManager
-from .protocol.net import SessionCloseErrorCode, \
+from .lib.protocol.dml import MessageManager
+from .lib.protocol.net import SessionCloseErrorCode, \
     ServerSession as CServerSession, ClientSession as CClientSession, \
     ServerDMLSession as CServerDMLSession, ClientDMLSession as CClientDMLSession
 from .services import ServiceParticipant
