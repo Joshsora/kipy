@@ -81,7 +81,16 @@ PYBIND11_MODULE(dml, m)
     DEF_FIELD_CLASS("UShrtField", USHRT);
     DEF_FIELD_CLASS("IntField", INT);
     DEF_FIELD_CLASS("UIntField", UINT);
-    DEF_FIELD_CLASS("StrField", STR);
+    DEF_FIELD_CLASS("StrField", STR)
+        // Property: value_bytes
+        .def_property("value_bytes",
+            [](const StrField &self)
+            {
+                return py::bytes(self.get_value());
+            },
+            static_cast<void (StrField::*)(STR)>(&StrField::set_value),
+            py::return_value_policy::copy)
+        ;
     DEF_FIELD_CLASS("WStrField", WSTR);
     DEF_FIELD_CLASS("FltField", FLT);
     DEF_FIELD_CLASS("DblField", DBL);
@@ -127,15 +136,6 @@ PYBIND11_MODULE(dml, m)
         .def_property_readonly("size", &Record::get_size,
             py::return_value_policy::copy)
 
-        // Property: value_bytes
-        // .def_property("value_bytes",
-        //     [](const StrField &self)
-        //     {
-        //         return py::bytes(self.get_value());
-        //     },
-        //     static_cast<void (StrField::*)(STR)>(&StrField::set_value),
-        //     py::return_value_policy::copy)
-
         // Methods: has_*_field()
         DEF_HAS_FIELD_METHOD("has_byt_field", BYT)
         DEF_HAS_FIELD_METHOD("has_ubyt_field", UBYT)
@@ -176,5 +176,6 @@ PYBIND11_MODULE(dml, m)
         // Extension: to_bytes()
         DEF_TO_BYTES_EXTENSION(Record)
         // Extension: from_bytes()
-        DEF_FROM_BYTES_EXTENSION(Record);
+        DEF_FROM_BYTES_EXTENSION(Record)
+        ;
 }

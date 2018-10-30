@@ -351,6 +351,7 @@ PYBIND11_MODULE(protocol, m)
     using namespace ki::protocol::dml;
 
     // Submodule: dml
+
     py::module m_dml = m.def_submodule("dml");
 
     // Class: Message
@@ -402,7 +403,8 @@ PYBIND11_MODULE(protocol, m)
         // Extension: to_bytes()
         DEF_TO_BYTES_EXTENSION(Message)
         // Extension: from_bytes()
-        DEF_FROM_BYTES_EXTENSION(Message);
+        DEF_FROM_BYTES_EXTENSION(Message)
+        ;
 
     // Class: MessageTemplate
     py::class_<MessageTemplate>(m_dml, "MessageTemplate")
@@ -441,7 +443,8 @@ PYBIND11_MODULE(protocol, m)
 
         // Method: create_message()
         .def("create_message", &MessageTemplate::create_message,
-            py::return_value_policy::take_ownership);
+            py::return_value_policy::take_ownership)
+        ;
 
     // Class: MessageModule
     py::class_<MessageModule>(m_dml, "MessageModule")
@@ -499,7 +502,8 @@ PYBIND11_MODULE(protocol, m)
         .def("create_message",
             static_cast<Message *(MessageModule::*)(std::string) const>(
                 &MessageModule::create_message),
-            py::arg("message_name"), py::return_value_policy::take_ownership);
+            py::arg("message_name"), py::return_value_policy::take_ownership)
+        ;
 
     // Class: MessageManager
     py::class_<MessageManager>(m_dml, "MessageManager")
@@ -563,13 +567,15 @@ PYBIND11_MODULE(protocol, m)
                 std::istringstream iss(data);
                 return self.message_from_binary(iss);
             },
-            py::arg("data"));
+            py::arg("data"))
+        ;
 
     // Submodule: dml (end)
 
     using namespace ki::protocol::net;
 
     // Submodule: net
+
     py::module m_net = m.def_submodule("net");
 
     // Class: PacketHeader
@@ -596,13 +602,15 @@ PYBIND11_MODULE(protocol, m)
         // Extension: to_bytes()
         DEF_TO_BYTES_EXTENSION(PacketHeader)
         // Extension: from_bytes()
-        DEF_FROM_BYTES_EXTENSION(PacketHeader);
+        DEF_FROM_BYTES_EXTENSION(PacketHeader)
+        ;
 
     // Enum: ReceiveState
     py::enum_<ReceiveState>(m_net, "ReceiveState")
         .value("WAITING_FOR_START_SIGNAL", ReceiveState::WAITING_FOR_START_SIGNAL)
         .value("WAITING_FOR_LENGTH", ReceiveState::WAITING_FOR_LENGTH)
-        .value("WAITING_FOR_PACKET", ReceiveState::WAITING_FOR_PACKET);
+        .value("WAITING_FOR_PACKET", ReceiveState::WAITING_FOR_PACKET)
+        ;
 
     // Enum: SessionCloseErrorCode
     py::enum_<SessionCloseErrorCode>(m_net, "SessionCloseErrorCode")
@@ -614,7 +622,8 @@ PYBIND11_MODULE(protocol, m)
         .value("UNHANDLED_APPLICATION_MESSAGE", SessionCloseErrorCode::UNHANDLED_APPLICATION_MESSAGE)
         .value("INVALID_MESSAGE", SessionCloseErrorCode::INVALID_MESSAGE)
         .value("SESSION_OFFER_TIMED_OUT", SessionCloseErrorCode::SESSION_OFFER_TIMED_OUT)
-        .value("SESSION_DIED", SessionCloseErrorCode::SESSION_DIED);
+        .value("SESSION_DIED", SessionCloseErrorCode::SESSION_DIED)
+        ;
 
     // Class: Session
     py::class_<Session, PySession>(m_net, "Session")
@@ -671,7 +680,8 @@ PYBIND11_MODULE(protocol, m)
             py::arg("size"))
         // Method: close() (protected, pure virtual)
         .def("close", &PublicistSession::close,
-            py::arg("error"));
+            py::arg("error"))
+        ;
 
     // Class: ServerSession
     py::class_<ServerSession, Session, PyServerSession>(
@@ -689,7 +699,8 @@ PYBIND11_MODULE(protocol, m)
         .def("on_connected", &PublicistServerSession::on_connected)
 
         // Method: on_established() (protected, virtual)
-        .def("on_established", &PublicistServerSession::on_established);
+        .def("on_established", &PublicistServerSession::on_established)
+        ;
 
     // Class: ClientSession
     py::class_<ClientSession, Session, PyClientSession>(
@@ -706,7 +717,8 @@ PYBIND11_MODULE(protocol, m)
         .def("on_connected", &PublicistClientSession::on_connected)
 
         // Method: on_established() (protected, virtual)
-        .def("on_established", &PublicistClientSession::on_established);
+        .def("on_established", &PublicistClientSession::on_established)
+        ;
 
     // Enum: InvalidDMLMessageErrorCode
     py::enum_<InvalidDMLMessageErrorCode>(m_net, "InvalidDMLMessageErrorCode")
@@ -716,7 +728,8 @@ PYBIND11_MODULE(protocol, m)
         .value("INVALID_MESSAGE_DATA", InvalidDMLMessageErrorCode::INVALID_MESSAGE_DATA)
         .value("INVALID_SERVICE", InvalidDMLMessageErrorCode::INVALID_SERVICE)
         .value("INVALID_MESSAGE_TYPE", InvalidDMLMessageErrorCode::INVALID_MESSAGE_TYPE)
-        .value("INSUFFICIENT_ACCESS", InvalidDMLMessageErrorCode::INSUFFICIENT_ACCESS);
+        .value("INSUFFICIENT_ACCESS", InvalidDMLMessageErrorCode::INSUFFICIENT_ACCESS)
+        ;
 
     // Class: DMLSession
     py::class_<DMLSession, Session, PyDMLSession>(
@@ -740,7 +753,8 @@ PYBIND11_MODULE(protocol, m)
             py::arg("message"))
 
         // Method: on_invalid_message() (protected, virtual)
-        .def("on_invalid_message", &PublicistDMLSession::on_invalid_message);
+        .def("on_invalid_message", &PublicistDMLSession::on_invalid_message)
+        ;
 
     // Class: ServerDMLSession
     py::class_<ServerDMLSession, ServerSession, DMLSession, PyServerDMLSession>(
@@ -749,7 +763,8 @@ PYBIND11_MODULE(protocol, m)
         // Initializer
         .def(py::init<uint16_t, const ki::protocol::dml::MessageManager &>(),
             py::arg("id"),
-            py::arg("manager"));
+            py::arg("manager"))
+        ;
 
     // Class: ClientDMLSession
     py::class_<ClientDMLSession, ClientSession, DMLSession, PyClientDMLSession>(
@@ -758,13 +773,15 @@ PYBIND11_MODULE(protocol, m)
         // Initializer
         .def(py::init<uint16_t, const ki::protocol::dml::MessageManager &>(),
             py::arg("id"),
-            py::arg("manager"));
+            py::arg("manager"))
+        ;
 
     // Submodule: net (end)
 
     using namespace ki::protocol::control;
 
     // Submodule: control
+
     py::module m_control = m.def_submodule("control");
 
     // Enum: Opcode
@@ -774,7 +791,8 @@ PYBIND11_MODULE(protocol, m)
         .value("UDP_HELLO", Opcode::UDP_HELLO)
         .value("KEEP_ALIVE", Opcode::KEEP_ALIVE)
         .value("KEEP_ALIVE_RSP", Opcode::KEEP_ALIVE_RSP)
-        .value("SESSION_ACCEPT", Opcode::SESSION_ACCEPT);
+        .value("SESSION_ACCEPT", Opcode::SESSION_ACCEPT)
+        ;
 
     // Class: SessionOffer
     py::class_<SessionOffer>(m_control, "SessionOffer")
@@ -805,7 +823,8 @@ PYBIND11_MODULE(protocol, m)
         // Extension: to_bytes()
         DEF_TO_BYTES_EXTENSION(SessionOffer)
         // Extension: from_bytes()
-        DEF_FROM_BYTES_EXTENSION(SessionOffer);
+        DEF_FROM_BYTES_EXTENSION(SessionOffer)
+        ;
 
     // Class: ServerKeepAlive
     py::class_<ServerKeepAlive>(m_control, "ServerKeepAlive")
@@ -826,7 +845,8 @@ PYBIND11_MODULE(protocol, m)
         // Extension: to_bytes()
         DEF_TO_BYTES_EXTENSION(ServerKeepAlive)
         // Extension: from_bytes()
-        DEF_FROM_BYTES_EXTENSION(ServerKeepAlive);
+        DEF_FROM_BYTES_EXTENSION(ServerKeepAlive)
+        ;
 
     // Class: ClientKeepAlive
     py::class_<ClientKeepAlive>(m_control, "ClientKeepAlive")
@@ -857,7 +877,8 @@ PYBIND11_MODULE(protocol, m)
         // Extension: to_bytes()
         DEF_TO_BYTES_EXTENSION(ClientKeepAlive)
         // Extension: from_bytes()
-        DEF_FROM_BYTES_EXTENSION(ClientKeepAlive);
+        DEF_FROM_BYTES_EXTENSION(ClientKeepAlive)
+        ;
 
     // Class: SessionAccept
     py::class_<SessionAccept>(m_control, "SessionAccept")
@@ -888,7 +909,8 @@ PYBIND11_MODULE(protocol, m)
         // Extension: to_bytes()
         DEF_TO_BYTES_EXTENSION(SessionAccept)
         // Extension: from_bytes()
-        DEF_FROM_BYTES_EXTENSION(SessionAccept);
+        DEF_FROM_BYTES_EXTENSION(SessionAccept)
+        ;
 
     // Submodule: control (end)
 }
