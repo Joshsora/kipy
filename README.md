@@ -1,5 +1,7 @@
 kipy: Python bindings and extensions for libki
 ==============================================
+![Docker Automated build](https://img.shields.io/docker/automated/Joshsora/kipy.svg)
+
 Docker
 ------
 The easiest way to use kipy is by utilizing our pre-built Docker image:

@@ -1,3 +1,7 @@
+# Lift symbols from .lib.util
+from .lib.util import bit_types, BitStream, BitStreamPos
+
+
 class AllocationError(Exception):
     pass
 

@@ -101,8 +101,9 @@ setup(
     ext_modules=[
         CMakeExtension('ki/lib/util'),
         CMakeExtension('ki/lib/dml'),
-        CMakeExtension('ki/lib/protocol')
-
+        CMakeExtension('ki/lib/protocol'),
+        CMakeExtension('ki/lib/pclass'),
+        CMakeExtension('ki/lib/serialization')
     ],
     cmdclass={
         'build_ext': CMakeBuild

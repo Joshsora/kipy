@@ -32,12 +32,10 @@ void def_bit_integer_class(py::module &m)
 
     // Class: BitInteger<N, Unsigned>
     py::class_<Class>(m, pyclass_name.c_str())
-        // Constructors
         .def(py::init<>())
         .def(py::init<const ki::BitInteger<N, Unsigned> &>(), py::arg("cp"))
         .def(py::init<const type>(), py::arg("value"))
 
-        // Overloaded operators
         .def(py::self += type())
         .def(py::self -= type())
         .def(py::self *= type())
@@ -45,18 +43,14 @@ void def_bit_integer_class(py::module &m)
         .def(py::self |= type())
         .def(py::self &= type())
 
-        // Descriptor: __repr__
         .def("__repr__",
-            [](py::object self)
+            [](const py::object &self)
             {
                 std::ostringstream oss;
                 oss << self.attr("__class__").attr("__name__").cast<std::string>();
                 oss << "(" << std::to_string(self.attr("__int__")().cast<type>()) << ")";
                 return oss.str();
             })
-
-        // Descriptor: __int__
-        // This will allow int() casts in Python.
         .def("__int__",
             [](ki::BitInteger<N, Unsigned> &self)
             {
@@ -131,10 +125,10 @@ PYBIND11_MODULE(util, m)
 {
     // Submodule: bit_types
 
-    py::module m_bit_types = m.def_submodule("bit_types");
+    py::module bit_types_submodule = m.def_submodule("bit_types");
 
     // Classes: bi*/bui*
-    def_bit_integer_classes<64>(m_bit_types);
+    def_bit_integer_classes<64>(bit_types_submodule);
 
     // Submodule: bit_types (end)
 
@@ -142,21 +136,19 @@ PYBIND11_MODULE(util, m)
 
     // Class: BitStream
     auto c = py::class_<BitStream>(m, "BitStream")
-        // Constructors
         .def(py::init<const size_t>(), py::arg("buffer_size") = KI_BITSTREAM_DEFAULT_BUFFER_SIZE)
 
-        // Property: capacity (read-only)
         .def_property_readonly("capacity", &BitStream::capacity)
-        // Property: data (read-only)
-        .def_property_readonly("data", &BitStream::data, py::return_value_policy::copy)
+        .def_property_readonly("data",
+            [](const BitStream &self)
+            {
+                return py::bytes(std::string((char *)self.data(), self.capacity()));
+            })
 
-        // Method: tell()
         .def("tell", &BitStream::tell)
-        // Method: seek()
         .def("seek", &BitStream::seek, py::arg("position"))
         ;
 
-    // Methods: read_*
     def_bit_stream_read_method<bool>(c, "read_bool");
     def_bit_stream_read_method<int8_t>(c, "read_int8");
     def_bit_stream_read_method<int16_t>(c, "read_int16");
@@ -167,7 +159,6 @@ PYBIND11_MODULE(util, m)
     def_bit_stream_read_method<uint32_t>(c, "read_uint32");
     def_bit_stream_read_method<uint64_t>(c, "read_uint64");
 
-    // Methods: write_*
     def_bit_stream_write_method<bool>(c, "write_bool");
     def_bit_stream_write_method<int8_t>(c, "write_int8");
     def_bit_stream_write_method<int16_t>(c, "write_int16");
@@ -178,20 +169,16 @@ PYBIND11_MODULE(util, m)
     def_bit_stream_write_method<uint32_t>(c, "write_uint32");
     def_bit_stream_write_method<uint64_t>(c, "write_uint64");
 
-    // Methods: read_bi*/read_bui*
     def_bit_integer_read_methods<64>(c);
-    // Methods: write_bi*/write_bui*
     def_bit_integer_write_methods<64>(c);
 
     // Class: BitStreamPos
     using stream_pos = BitStream::stream_pos;
 
     py::class_<stream_pos>(m, "BitStreamPos")
-        // Constructors
         .def(py::init<const intmax_t, const int>(), py::arg("byte") = 0, py::arg("bit") = 0)
         .def(py::init<const BitStream::stream_pos &>(), py::arg("cp"))
 
-        // Overloaded operators
         .def(py::self + py::self)
         .def(py::self + int())
         .def(py::self - py::self)
@@ -201,7 +188,6 @@ PYBIND11_MODULE(util, m)
         .def(py::self -= py::self)
         .def(py::self -= int())
 
-        // Descriptor: __repr__
         .def("__repr__",
             [](stream_pos &self)
             {
@@ -210,9 +196,9 @@ PYBIND11_MODULE(util, m)
                 return oss.str();
             })
 
-        // Property: byte (read-only)
         .def_property_readonly("byte", &stream_pos::get_byte)
-        // Property: bit (read-only)
         .def_property_readonly("bit", &stream_pos::get_bit)
+
+        .def("as_bits", &stream_pos::as_bits)
         ;
 }
