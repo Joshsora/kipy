@@ -1,6 +1,8 @@
 kipy: Python bindings and extensions for libki
 ==============================================
-![Docker Automated build](https://img.shields.io/docker/automated/Joshsora/kipy.svg)
+![GitHub (pre-)release](https://img.shields.io/github/release-pre/Joshsora/kipy.svg)
+![Docker Build Status](https://img.shields.io/docker/build/joshsora/kipy.svg)
+![GitHub](https://img.shields.io/github/license/Joshsora/kipy.svg)
 
 Docker
 ------
