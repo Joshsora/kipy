@@ -2,6 +2,7 @@
 #include <iostream>
 #include <sstream>
 #include <cmath>
+#include <memory>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/operators.h>
@@ -10,18 +11,23 @@
 #include <ki/util/BitStream.h>
 
 namespace py = pybind11;
+using namespace pybind11::literals;
 
+namespace ki
+{
+
+namespace
+{
 template <uint8_t N, bool Unsigned>
 void def_bit_integer_class(py::module &m)
 {
-    using Class = ki::BitInteger<N, Unsigned>;
+    using Class = BitInteger<N, Unsigned>;
 
-    // Make the class name
-    std::string pyclass_name;
+    std::string name;
     if (Unsigned)
-        pyclass_name = "bui" + std::to_string(N);
+        name = "bui" + std::to_string(N);
     else
-        pyclass_name = "bi" + std::to_string(N);
+        name = "bi" + std::to_string(N);
 
     // The type used to internally store the N-bit integer.
     using type = typename std::conditional<
@@ -30,11 +36,10 @@ void def_bit_integer_class(py::module &m)
         typename ki::bits<N>::int_type
     >::type;
 
-    // Class: BitInteger<N, Unsigned>
-    py::class_<Class>(m, pyclass_name.c_str())
+    py::class_<Class>(m, name.c_str())
         .def(py::init<>())
-        .def(py::init<const ki::BitInteger<N, Unsigned> &>(), py::arg("cp"))
-        .def(py::init<const type>(), py::arg("value"))
+        .def(py::init<const ki::BitInteger<N, Unsigned> &>(), "cp"_a)
+        .def(py::init<const type>(), "value"_a)
 
         .def(py::self += type())
         .def(py::self -= type())
@@ -43,20 +48,17 @@ void def_bit_integer_class(py::module &m)
         .def(py::self |= type())
         .def(py::self &= type())
 
-        .def("__repr__",
-            [](const py::object &self)
-            {
-                std::ostringstream oss;
-                oss << self.attr("__class__").attr("__name__").cast<std::string>();
-                oss << "(" << std::to_string(self.attr("__int__")().cast<type>()) << ")";
-                return oss.str();
-            })
-        .def("__int__",
-            [](ki::BitInteger<N, Unsigned> &self)
-            {
-                return (type)self;
-            })
-        ;
+        .def("__repr__", [](const py::object &self)
+        {
+            std::ostringstream oss;
+            oss << self.attr("__class__").attr("__name__").cast<std::string>();
+            oss << "(" << std::to_string(self.attr("__int__")().cast<type>()) << ")";
+            return oss.str();
+        })
+        .def("__int__", [](BitInteger<N, Unsigned> &self)
+        {
+            return static_cast<type>(self);
+        });
 }
 
 template <uint8_t N>
@@ -70,135 +72,146 @@ void def_bit_integer_classes(py::module &m)
 template <>
 void def_bit_integer_classes<0>(py::module &m) {}
 
-template <
-    typename IntegerT,
-    typename = std::enable_if<ki::is_integral<IntegerT>::value>
->
-void def_bit_stream_read_method(py::class_<ki::BitStream> &c, const char *name)
+
+class PyIBitBuffer : public IBitBuffer
 {
-    c.def(name,
-        &ki::BitStream::read<IntegerT>,
-        py::arg("bits") = ki::bitsizeof<IntegerT>::value);
+public:
+    using IBitBuffer::IBitBuffer;
+
+    uint8_t *data() const override
+    {
+        PYBIND11_OVERLOAD_PURE(uint8_t *, IBitBuffer, data, );
+    }
+
+    std::size_t size() const override
+    {
+        PYBIND11_OVERLOAD_PURE(std::size_t, IBitBuffer, size, );
+    }
+
+    void resize(std::size_t new_size) override
+    {
+        PYBIND11_OVERLOAD_PURE(void, IBitBuffer, resize, new_size);
+    }
+
+    uint64_t read(IBitBuffer::buffer_pos position, uint8_t bits) const override
+    {
+        PYBIND11_OVERLOAD_PURE(uint64_t, IBitBuffer, read, position, bits);
+    }
+
+    void write(uint64_t value, IBitBuffer::buffer_pos position, uint8_t bits) override
+    {
+        PYBIND11_OVERLOAD_PURE(void, IBitBuffer, write, value, position, bits);
+    }
+};
 }
-
-template <
-    typename IntegerT,
-    typename = std::enable_if<ki::is_integral<IntegerT>::value>
->
-void def_bit_stream_write_method(py::class_<ki::BitStream> &c, const char *name)
-{
-    c.def(name,
-        &ki::BitStream::write<IntegerT>,
-        py::arg("value"),
-        py::arg("bits") = ki::bitsizeof<IntegerT>::value);
-}
-
-template <uint8_t N>
-void def_bit_integer_read_methods(py::class_<ki::BitStream> &c)
-{
-    // Method: read_bi*
-    def_bit_stream_read_method<ki::bi<N>>(c, ("read_bi" + std::to_string(N)).c_str());
-    // Method: read_bui*
-    def_bit_stream_read_method<ki::bui<N>>(c, ("read_bui" + std::to_string(N)).c_str());
-
-    def_bit_integer_read_methods<N - 1>(c);
-}
-
-template <>
-void def_bit_integer_read_methods<0>(py::class_<ki::BitStream> &c) {}
-
-template <uint8_t N>
-void def_bit_integer_write_methods(py::class_<ki::BitStream> &c)
-{
-    // Method: write_bi*
-    def_bit_stream_write_method<ki::bi<N>>(c, ("write_bi" + std::to_string(N)).c_str());
-    // Method: write_bui*
-    def_bit_stream_write_method<ki::bui<N>>(c, ("write_bui" + std::to_string(N)).c_str());
-
-    def_bit_integer_write_methods<N - 1>(c);
-}
-
-template <>
-void def_bit_integer_write_methods<0>(py::class_<ki::BitStream> &c) {}
 
 PYBIND11_MODULE(util, m)
 {
-    // Submodule: bit_types
-
+    // Submodules
     py::module bit_types_submodule = m.def_submodule("bit_types");
 
-    // Classes: bi*/bui*
+    // Classes
+    py::class_<IBitBuffer::buffer_pos> buffer_pos_cls(m, "BufferPos");
+    py::class_<IBitBuffer, PyIBitBuffer> i_bit_buffer_cls(m, "IBitBuffer");
+    py::class_<BitBuffer, IBitBuffer> bit_buffer_cls(m, "BitBuffer");
+    py::class_<BitBufferSegment, IBitBuffer> bit_buffer_segment_cls(m, "BitBufferSegment");
+    py::class_<BitStream> bit_stream_cls(m, "BitStream");
+
+    // BitInteger Definitions
     def_bit_integer_classes<64>(bit_types_submodule);
 
-    // Submodule: bit_types (end)
+    // BufferPos Definitions
+    buffer_pos_cls.def(py::init<uint32_t, int>(), "byte"_a = 0, "bit"_a = 0);
+    buffer_pos_cls.def("__repr__", [](IBitBuffer::buffer_pos &self)
+    {
+        std::ostringstream oss;
+        oss << "BufferPos(" << self.get_byte() << ", " << std::to_string(self.get_bit()) << ")";
+        return oss.str();
+    });
+    buffer_pos_cls.def("as_bytes", &IBitBuffer::buffer_pos::as_bytes);
+    buffer_pos_cls.def("as_bits", &IBitBuffer::buffer_pos::as_bits);
+    buffer_pos_cls.def_property_readonly("byte", &IBitBuffer::buffer_pos::get_byte);
+    buffer_pos_cls.def_property_readonly("bit", &IBitBuffer::buffer_pos::get_bit);
+    buffer_pos_cls.def(py::self + py::self);
+    buffer_pos_cls.def(py::self - py::self);
+    buffer_pos_cls.def(py::self + int());
+    buffer_pos_cls.def(py::self - int());
+    buffer_pos_cls.def(py::self += py::self);
+    buffer_pos_cls.def(py::self -= py::self);
+    buffer_pos_cls.def(py::self += int());
+    buffer_pos_cls.def(py::self -= int());
 
-    using namespace ki;
+    // IBitBuffer Definitions
+    i_bit_buffer_cls.def(py::init<>());
+    i_bit_buffer_cls.def_property("data", [](const IBitBuffer &self)
+    {
+        return py::bytes(std::string(reinterpret_cast<char *>(self.data()), self.size()));
+    }, [](IBitBuffer &self, char *buffer)
+    {
+        uint8_t *c_buffer = reinterpret_cast<uint8_t *>(buffer);
+        std::memcpy(self.data(), c_buffer, self.size());
+    });
+    i_bit_buffer_cls.def_property_readonly("size", &IBitBuffer::size);
+    i_bit_buffer_cls.def("resize", &IBitBuffer::resize, "new_size"_a);
+    i_bit_buffer_cls.def("segment", &IBitBuffer::segment,
+        py::return_value_policy::take_ownership, "from"_a, "bitsize"_a);
+    i_bit_buffer_cls.def("read_signed", [](const IBitBuffer &self, IBitBuffer::buffer_pos position, const uint8_t bits = bitsizeof<int64_t>::value)
+    {
+        int64_t value = self.read<int64_t>(position, bits);
+        if (bits < 64)
+        {
+            int64_t positive = value & ((1 << (bits-1)) - 1);
+            int64_t signed_place_value = 1 << (bits-1);
+            value = positive - (value & signed_place_value);
+        }
+        return value;
+    }, "position"_a, "bits"_a);
+    i_bit_buffer_cls.def("read_unsigned", &IBitBuffer::read<uint64_t>,
+        "position"_a, "bits"_a = bitsizeof<uint64_t>::value);
+    i_bit_buffer_cls.def("write_signed", &IBitBuffer::write<int64_t>,
+        "value"_a, "position"_a, "bits"_a = bitsizeof<int64_t>::value);
+    i_bit_buffer_cls.def("write_unsigned", &IBitBuffer::write<uint64_t>,
+        "value"_a, "position"_a, "bits"_a = bitsizeof<uint64_t>::value);
 
-    // Class: BitStream
-    auto c = py::class_<BitStream>(m, "BitStream")
-        .def(py::init<const size_t>(), py::arg("buffer_size") = KI_BITSTREAM_DEFAULT_BUFFER_SIZE)
+    // BitBuffer Definitions
+    bit_buffer_cls.def(py::init<std::size_t>(), "buffer_size"_a = KI_BITBUFFER_DEFAULT_SIZE);
+    bit_buffer_cls.def(py::init<const BitBuffer &>(), "that"_a);
+    bit_buffer_cls.def(py::init([](char *buffer, const std::size_t buffer_size)
+    {
+        auto *bit_buffer = new BitBuffer(buffer_size);
+        uint8_t *c_buffer = reinterpret_cast<uint8_t *>(buffer);
+        std::memcpy(bit_buffer->data(), c_buffer, bit_buffer->size());
+        return std::unique_ptr<BitBuffer>(bit_buffer);
+    }), "buffer"_a, "buffer_size"_a);
 
-        .def_property_readonly("capacity", &BitStream::capacity)
-        .def_property_readonly("data",
-            [](const BitStream &self)
-            {
-                return py::bytes(std::string((char *)self.data(), self.capacity()));
-            })
+    // BitBufferSegment Definitions
+    bit_buffer_segment_cls.def(py::init<IBitBuffer &, IBitBuffer::buffer_pos, std::size_t>(),
+        "buffer"_a, "from"_a, "bitsize"_a);
 
-        .def("tell", &BitStream::tell)
-        .def("seek", &BitStream::seek, py::arg("position"))
-        ;
+    // BitStream Definitions
+    bit_stream_cls.def(py::init<IBitBuffer &>(), py::keep_alive<1, 2>(), "buffer"_a);
+    bit_stream_cls.def(py::init<const BitStream &>(), "that"_a);
+    bit_stream_cls.def("tell", &BitStream::tell);
+    bit_stream_cls.def("seek", &BitStream::seek, "position"_a, "expand"_a);
+    bit_stream_cls.def_property_readonly("capacity", &BitStream::capacity);
+    bit_stream_cls.def_property_readonly("buffer", &BitStream::buffer);
+    bit_stream_cls.def("read_signed", [](BitStream &self, const uint8_t bits = bitsizeof<int64_t>::value)
+    {
+        int64_t value = self.read<int64_t>(bits);
+        if (bits < 64)
+        {
+            int64_t positive = value & ((1 << (bits-1)) - 1);
+            int64_t signed_place_value = 1 << (bits-1);
+            value = positive - (value & signed_place_value);
+        }
+        return value;
+    }, "bits"_a);
+    bit_stream_cls.def("read_unsigned", &BitStream::read<uint64_t>,
+        "bits"_a = bitsizeof<uint64_t>::value);
+    bit_stream_cls.def("write_signed", &BitStream::write<int64_t>,
+        "value"_a, "bits"_a = bitsizeof<int64_t>::value);
+    bit_stream_cls.def("write_unsigned", &BitStream::write<uint64_t>,
+        "value"_a, "bits"_a = bitsizeof<uint64_t>::value);
+}
 
-    def_bit_stream_read_method<bool>(c, "read_bool");
-    def_bit_stream_read_method<int8_t>(c, "read_int8");
-    def_bit_stream_read_method<int16_t>(c, "read_int16");
-    def_bit_stream_read_method<int32_t>(c, "read_int32");
-    def_bit_stream_read_method<int64_t>(c, "read_int64");
-    def_bit_stream_read_method<uint8_t>(c, "read_uint8");
-    def_bit_stream_read_method<uint16_t>(c, "read_uint16");
-    def_bit_stream_read_method<uint32_t>(c, "read_uint32");
-    def_bit_stream_read_method<uint64_t>(c, "read_uint64");
-
-    def_bit_stream_write_method<bool>(c, "write_bool");
-    def_bit_stream_write_method<int8_t>(c, "write_int8");
-    def_bit_stream_write_method<int16_t>(c, "write_int16");
-    def_bit_stream_write_method<int32_t>(c, "write_int32");
-    def_bit_stream_write_method<int64_t>(c, "write_int64");
-    def_bit_stream_write_method<uint8_t>(c, "write_uint8");
-    def_bit_stream_write_method<uint16_t>(c, "write_uint16");
-    def_bit_stream_write_method<uint32_t>(c, "write_uint32");
-    def_bit_stream_write_method<uint64_t>(c, "write_uint64");
-
-    def_bit_integer_read_methods<64>(c);
-    def_bit_integer_write_methods<64>(c);
-
-    // Class: BitStreamPos
-    using stream_pos = BitStream::stream_pos;
-
-    py::class_<stream_pos>(m, "BitStreamPos")
-        .def(py::init<const intmax_t, const int>(), py::arg("byte") = 0, py::arg("bit") = 0)
-        .def(py::init<const BitStream::stream_pos &>(), py::arg("cp"))
-
-        .def(py::self + py::self)
-        .def(py::self + int())
-        .def(py::self - py::self)
-        .def(py::self - int())
-        .def(py::self += py::self)
-        .def(py::self += int())
-        .def(py::self -= py::self)
-        .def(py::self -= int())
-
-        .def("__repr__",
-            [](stream_pos &self)
-            {
-                std::ostringstream oss;
-                oss << "BitStreamPos(" << self.get_byte() << ", " << std::to_string(self.get_bit()) << ")";
-                return oss.str();
-            })
-
-        .def_property_readonly("byte", &stream_pos::get_byte)
-        .def_property_readonly("bit", &stream_pos::get_bit)
-
-        .def("as_bits", &stream_pos::as_bits)
-        ;
 }

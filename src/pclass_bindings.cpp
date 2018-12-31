@@ -3,8 +3,11 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <vector>
 
+#include <ki/util/unique.h>
 #include <ki/util/BitTypes.h>
+#include <ki/pclass/Value.h>
 #include <ki/pclass/types/Type.h>
 #include <ki/pclass/types/PrimitiveType.h>
 #include <ki/pclass/TypeSystem.h>
@@ -12,6 +15,19 @@
 #include <ki/pclass/PropertyClass.h>
 #include <ki/pclass/PropertyList.h>
 #include <ki/pclass/Property.h>
+#include <ki/pclass/VectorProperty.h>
+
+#define DECLARE_VALUE_CASTER(t) \
+    ValueCaster::declare<py::object, t>(); \
+    ValueCaster::declare<t, py::object>()
+
+#define DECLARE_INTEGER_VALUE_CASTER(st, ut) \
+    DECLARE_VALUE_CASTER(st); \
+    DECLARE_VALUE_CASTER(ut)
+
+#define DECLARE_BIT_INTEGER_VALUE_CASTER(n) \
+    DECLARE_VALUE_CASTER(bi<n>); \
+    DECLARE_VALUE_CASTER(bui<n>)
 
 namespace py = pybind11;
 using namespace pybind11::literals;
@@ -21,161 +37,582 @@ namespace ki
 namespace pclass
 {
 
-namespace
+namespace detail
 {
-template <typename ValueT>
-void def_primitive_type_class(py::module &m, const char *name)
-{
-    using Class = PrimitiveType<ValueT>;
-    using BaseClass = Type;
+    /**
+    * Determines whether a type can be assigned to a py::object.
+    */
+    template <typename SrcT, typename Enable = void>
+    struct is_py_assignable : std::false_type {};
 
-    py::class_<Class, BaseClass>(m, name)
-        .def(py::init<const std::string, const TypeSystem &>(), "name"_a, "type_system"_a)
-        .def("write_to", [](const Type &self, ki::BitStream &stream, ValueT &value)
+    /**
+    * All fundamental types can be assigned to a py::object.
+    */
+    template <typename SrcT>
+    struct is_py_assignable<
+        SrcT,
+        typename std::enable_if<std::is_fundamental<SrcT>::value>::type
+    > : std::true_type {};
+
+    /**
+    * std::string can be assigned to a py::object.
+    */
+    template <>
+    struct is_py_assignable<std::string> : std::true_type {};
+
+    /**
+    * std::u16string can be assigned to a py::object.
+    */
+    template <>
+    struct is_py_assignable<std::u16string> : std::true_type {};
+
+    /**
+    * BitInteger can be assigned to a py::object.
+    */
+    template <uint8_t N, bool Unsigned>
+    struct is_py_assignable<BitInteger<N, Unsigned>> : std::true_type {};
+
+    /**
+    * value_caster specialization for casting py::object to any
+    * py::object-assignable value.
+    */
+    template <typename DestT>
+    struct value_caster<
+        py::object, DestT,
+        typename std::enable_if<is_py_assignable<DestT>::value>::type
+    > : value_caster_impl<py::object, DestT>
+    {
+        DestT cast_value(const py::object &value) const override
         {
-            self.write_to(stream, Value(value));
-        }, "stream"_a, "value"_a)
-        .def("read_from", [](const Class &self, ki::BitStream &stream)
+            try
+            {
+                return value.cast<DestT>();
+            }
+            catch (py::cast_error &e)
+            {
+                return bad_cast();
+            }
+        }
+    };
+
+    /**
+    * value_caster specialization for casting py::object to an
+    * std::string.
+    */
+    template <>
+    struct value_caster<py::object, std::string>
+        : value_caster_impl<py::object, std::string>
+    {
+        std::string cast_value(const py::object &value) const override
         {
-            ValueT return_value;
-            Value value(return_value);
-            self.read_from(stream, value);
-            return return_value;
-        }, "stream"_a);
+            try
+            {
+                return value.cast<std::string>();
+            }
+            catch (py::cast_error &e)
+            {
+                return bad_cast();
+            }
+        }
+    };
+
+    /**
+    * value_caster specialization for casting any py::object-assignable
+    * value to a py::object.
+    */
+    template <typename SrcT>
+    struct value_caster<
+        SrcT, py::object,
+        typename std::enable_if<is_py_assignable<SrcT>::value>::type
+    > : value_caster_impl<SrcT, py::object>
+    {
+        py::object cast_value(const SrcT &value) const override
+        {
+            try
+            {
+                return py::cast(value);
+            }
+            catch (py::cast_error &e)
+            {
+                return bad_cast();
+            }
+        }
+    };
 }
 
-
-class PyHashCalculator : public HashCalculator
+namespace
 {
-public:
-    using HashCalculator::HashCalculator;
-
-    hash_t calculate_type_hash(const std::string &name) const override
+    /**
+    * A Python alias class for HashCalculator.
+    */
+    class PyHashCalculator : public HashCalculator
     {
-        PYBIND11_OVERLOAD_PURE(hash_t, HashCalculator, calculate_type_hash, name);
-    }
+    public:
+        using HashCalculator::HashCalculator;
 
-    hash_t calculate_property_hash(const std::string &name) const override
+        hash_t calculate_type_hash(const std::string &name) const override
+        {
+            PYBIND11_OVERLOAD_PURE(hash_t, HashCalculator, calculate_type_hash, name);
+        }
+
+        hash_t calculate_property_hash(const std::string &name) const override
+        {
+            PYBIND11_OVERLOAD_PURE(hash_t, HashCalculator, calculate_property_hash, name);
+        }
+    };
+
+    /**
+    * A Python-based ClassType.
+    * PropertyClass instances will be instantiated from the given
+    * Python-defined class.
+    */
+    class PyClassType : public IClassType
     {
-        PYBIND11_OVERLOAD_PURE(hash_t, HashCalculator, calculate_property_hash, name);
-    }
-};
+    public:
+        PyClassType(const std::string &name, const py::object &cls,
+            const Type *base_class, const TypeSystem &type_system)
+            : IClassType(name, base_class, type_system)
+        {
+            // Verify that this is a valid class type.
+            auto *type_ptr = cls.ptr();
+            if (!PyType_Check(type_ptr))
+            {
+                throw std::runtime_error("Invalid class object passed to ClassType constructor.");
+            }
+            
+            // TODO: Verify that the subclass is PropertyClass.
+            m_cls = cls;
+        }
 
-class PyType : public Type
-{
-public:
-    using Type::Type;
+        std::unique_ptr<PropertyClass> instantiate() const override
+        {
+            // Python only knows about the Type base class.
+            const auto &type = static_cast<const Type &>(*this);
 
-    PropertyClass *instantiate() const override
+            // Instantiate the Python object.
+            py::object type_system = py::cast(get_type_system());  // Cast to PyTypeSystem
+            py::object instance = m_cls(type, type_system);
+
+            // Increment the reference count so that it isn't destroyed
+            // when the stack is cleaned up.
+            // At a later point, instance.dec_ref() should be called to
+            // avoid memory leaks.
+            instance.inc_ref();
+
+            return std::unique_ptr<PropertyClass>(
+                instance.cast<PropertyClass *>()
+            );
+        }
+
+        void write_to(BitStream &stream, Value value) const override
+        {
+            const auto &object = value.dereference<PropertyClass>().get<PropertyClass>();
+            const auto &properties = object.get_properties();
+            for (auto it = properties.begin(); it != properties.end(); ++it)
+                it->write_value_to(stream);
+        }
+
+        Value read_from(BitStream &stream) const override
+        {
+            auto &object = *instantiate();
+            auto &properties = object.get_properties();
+            for (auto it = properties.begin(); it != properties.end(); ++it)
+                it->read_value_from(stream);
+            return Value::make_reference<PropertyClass>(object);
+        }
+
+    private:
+        py::object m_cls;
+    };
+
+    /**
+    * A Python-based TypeSystem.
+    * Provides a method for defining class types, and instantiating
+    * Python-defined PropertyClass objects.
+    */
+    class PyTypeSystem : public TypeSystem
     {
-        PYBIND11_OVERLOAD(PropertyClass *, Type, instantiate, );
-    }
-};
+    public:
+        using TypeSystem::TypeSystem;
 
-class PyPropertyBase : public PropertyBase
-{
-public:
-    using PropertyBase::PropertyBase;
+        void define_class(const std::string &name, const py::object &cls, const Type *base_class)
+        {
+            define_type(std::unique_ptr<Type>(new PyClassType(name, cls, base_class, *this)));
+        }
 
-    bool is_pointer() const override
+        py::object instantiate(const std::string &name)
+        {
+            // Instantiate the PropertyClass, and cast it to its Python representation.
+            const auto &type = get_type(name);
+            py::object instance = py::cast(type.instantiate().release());
+
+            // This object was just instantiated, and as such now has a
+            // reference count >= 2; decrement the reference count to avoid
+            // memory leaks.
+            instance.dec_ref();
+
+            return instance;
+        }
+    };
+
+    /**
+    * A Python-based StaticProperty.
+    * This makes use of py::object as a way of storing the value,
+    * rather than ki::Value.
+    */
+    class PyStaticProperty : public IProperty
     {
-        PYBIND11_OVERLOAD(bool, PropertyBase, is_pointer, );
-    }
+    public:
+        PyStaticProperty(PropertyClass &object, const std::string &name,
+            const Type &type, bool is_pointer = false)
+            : IProperty(object, name, type)
+        {
+            m_is_pointer = is_pointer;
+        }
 
-    bool is_dynamic() const override
+        bool is_pointer() const override
+        {
+            return m_is_pointer;
+        }
+
+        bool is_dynamic() const override
+        {
+            return false;
+        }
+
+        bool is_array() const override
+        {
+            return false;
+        }
+
+        std::size_t get_element_count() const override
+        {
+            return 1;
+        }
+
+        void set_element_count(std::size_t size) override
+        {
+            throw std::runtime_error("Tried to call set_element_count() on a property that is not dynamic.");
+        }
+
+        Value get_value(std::size_t index) const override
+        {
+            if (index < 0 || index >= get_element_count())
+                throw std::runtime_error("Index out of bounds.");
+            return Value::make_reference(m_value);
+        }
+
+        void set_value(Value value, const std::size_t index) override
+        {
+            if (index < 0 || index >= get_element_count())
+                throw std::runtime_error("Index out of bounds.");
+            m_value = value.dereference<py::object>().get<py::object>();
+        }
+
+        const PropertyClass *get_object(const std::size_t index) const override
+        {
+            if (index < 0 || index >= get_element_count())
+                throw std::runtime_error("Index out of bounds.");
+
+            try
+            {
+                return m_value.cast<const PropertyClass *>();
+            }
+            catch (py::cast_error &e)
+            {
+                std::ostringstream oss;
+                oss << "Failed to cast value of StaticProperty to PropertyClass -- " << e.what();
+                throw std::runtime_error(oss.str());
+            }
+        }
+
+        void set_object(std::unique_ptr<PropertyClass> &object, const std::size_t index) override
+        {
+            if (index < 0 || index >= get_element_count())
+                throw std::runtime_error("Index out of bounds.");
+
+            m_value = py::cast(dynamic_cast<PropertyClass *>(object.get()));
+
+            // This object was just instantiated, and as such now has a
+            // reference count >= 2; decrement the reference count to
+            // avoid memory leaks.
+            m_value.dec_ref();
+        }
+
+        py::object &get()
+        {
+            return m_value;
+        }
+
+        const py::object &get() const
+        {
+            return m_value;
+        }
+
+        void set(const py::object &value)
+        {
+            m_value = value;
+        }
+
+    private:
+        bool m_is_pointer;
+        py::object m_value;
+    };
+
+    /**
+    * A Python-based VectorProperty.
+    * This makes use of py::list as a way of storing the value,
+    * rather than std::vector.
+    */
+    class PyVectorProperty : public IProperty
     {
-        PYBIND11_OVERLOAD(bool, PropertyBase, is_dynamic, );
-    }
+    public:
+        PyVectorProperty(PropertyClass &object, const std::string &name,
+            const Type &type, bool is_pointer = false)
+            : IProperty(object, name, type)
+        {
+            m_is_pointer = is_pointer;
+        }
 
-    Value get_value() const override
+        bool is_pointer() const override
+        {
+            return m_is_pointer;
+        }
+
+        bool is_dynamic() const override
+        {
+            return true;
+        }
+
+        bool is_array() const override
+        {
+            return true;
+        }
+
+        std::size_t get_element_count() const override
+        {
+            return m_list.size();
+        }
+        
+        void set_element_count(const std::size_t size) override
+        {
+            // Empty the list.
+            m_list = py::list();
+
+            // Fill it with NoneTypes up to the desired size.
+            for (auto i = 0; i < size; i++)
+                m_list.append(nullptr);
+        }
+
+        Value get_value(std::size_t index) const override
+        {
+            if (index < 0 || index >= get_element_count())
+                throw std::runtime_error("Index out of bounds.");
+            return Value::make_reference(m_list[index]);
+        }
+
+        void set_value(Value value, const std::size_t index) override
+        {
+            if (index < 0 || index >= get_element_count())
+                throw std::runtime_error("Index out of bounds.");
+            m_list[index] = value.dereference<py::object>().get<py::object>();
+        }
+
+        const PropertyClass *get_object(const std::size_t index) const override
+        {
+            if (index < 0 || index >= get_element_count())
+                throw std::runtime_error("Index out of bounds.");
+
+            try
+            {
+                return m_list[index].cast<const PropertyClass *>();
+            }
+            catch (py::cast_error &e)
+            {
+                std::ostringstream oss;
+                oss << "Failed to cast value of VectorProperty.at(" << index <<
+                    ") to PropertyClass -- " << e.what();
+                throw std::runtime_error(oss.str());
+            }
+        }
+
+        void set_object(std::unique_ptr<PropertyClass> &object, const std::size_t index) override
+        {
+            if (index < 0 || index >= get_element_count())
+                throw std::runtime_error("Index out of bounds.");
+
+            py::object py_object = py::cast(dynamic_cast<PropertyClass *>(object.get()));
+            m_list[index] = py_object;
+
+            // This object was just instantiated, and as such now has a
+            // reference count >= 2; decrement the reference count to
+            // avoid memory leaks.
+            py_object.dec_ref();
+        }
+
+        py::list &get()
+        {
+            return m_list;
+        }
+
+        const py::list &get() const
+        {
+            return m_list;
+        }
+
+        void set(const py::list &value)
+        {
+            m_list = value;
+        }
+
+    private:
+        bool m_is_pointer;
+        py::list m_list;
+    };
+
+    /**
+    * A Python alias class for PropertyClass.
+    */
+    class PyPropertyClass : public PropertyClass
     {
-        PYBIND11_OVERLOAD_PURE(Value, PropertyBase, get_value, );
-    }
+    public:
+        using PropertyClass::PropertyClass;
 
-    const PropertyClass *get_object() const override
+        void on_created() const override
+        {
+            PYBIND11_OVERLOAD(void, PropertyClass, on_created, );
+        }
+    };
+
+    /**
+    * Allows for public access of the Type::m_kind attribute.
+    */
+    class TypePublicist : public Type
     {
-        PYBIND11_OVERLOAD_PURE(const PropertyClass *, PropertyBase, get_object, );
-    }
+    public:
+        using Type::m_kind;
+    };
 
-    void write_value_to(BitStream &stream) const override
+    /**
+    * TODO: Documentation.
+    */
+    class PropertyDef
     {
-        PYBIND11_OVERLOAD_PURE(void, PropertyBase, write_value_to, stream);
-    }
+    public:
+        PropertyDef(
+            const std::string &name, const std::string &type_name,
+            bool is_pointer = false)
+        {
+            m_name = name;
+            m_type_name = type_name;
+            m_is_pointer = is_pointer;
+        }
 
-    void read_value_from(BitStream &stream) override
+        std::string get_name() const
+        {
+            return m_name;
+        }
+
+        std::string get_type_name() const
+        {
+            return m_type_name;
+        }
+
+        bool is_pointer() const
+        {
+            return m_is_pointer;
+        }
+
+        virtual void instantiate(PropertyClass &object) const
+        {
+            std::ostringstream oss;
+            oss << "PropertyDef '" << m_name << "' does not implement PropertyDef::instantiate.";
+            throw std::runtime_error(oss.str());
+        }
+        
+    private:
+        std::string m_name;
+        std::string m_type_name;
+        bool m_is_pointer;
+    };
+
+    /**
+    * TODO: Documentation.
+    */
+    class StaticPropertyDef : public PropertyDef
     {
-        PYBIND11_OVERLOAD_PURE(void, PropertyBase, read_value_from, stream);
-    }
-};
+    public:
+        using PropertyDef::PropertyDef;
 
-class PyDynamicPropertyBase : public DynamicPropertyBase
-{
-public:
-    using DynamicPropertyBase::DynamicPropertyBase;
+        void instantiate(PropertyClass &object) const override
+        {
+            const auto &type_system = object.get_type().get_type_system();
+            const auto &type = type_system.get_type(get_type_name());
+            new PyStaticProperty(object, get_name(), type, is_pointer());
+        }
+    };
 
-    bool is_pointer() const override
+    /**
+    * TODO: Documentation.
+    */
+    class VectorPropertyDef : public PropertyDef
     {
-        PYBIND11_OVERLOAD(bool, DynamicPropertyBase, is_pointer, );
-    }
+    public:
+        using PropertyDef::PropertyDef;
 
-    std::size_t get_element_count() const override
+        void instantiate(PropertyClass &object) const override
+        {
+            const TypeSystem &type_system = object.get_type().get_type_system();
+            const Type &type = type_system.get_type(get_type_name());
+            new PyVectorProperty(object, get_name(), type, is_pointer());
+        }
+    };
+
+    /**
+    * A Python alias class for PropertyDef.
+    */
+    class PyPropertyDef : public PropertyDef
     {
-        PYBIND11_OVERLOAD_PURE(std::size_t, DynamicPropertyBase, get_element_count, );
-    }
+        using PropertyDef::PropertyDef;
 
-    Value get_value(int index) const override
-    {
-        PYBIND11_OVERLOAD_PURE(Value, DynamicPropertyBase, get_value, index);
-    }
-
-    const PropertyClass *get_object(int index) const override
-    {
-        PYBIND11_OVERLOAD_PURE(const PropertyClass *, DynamicPropertyBase, get_object, index);
-    }
-
-    void write_value_to(BitStream &stream, int index) const override
-    {
-        PYBIND11_OVERLOAD_PURE(void, DynamicPropertyBase, write_value_to, stream, index);
-    }
-
-    void read_value_from(BitStream &stream, int index) override
-    {
-        PYBIND11_OVERLOAD_PURE(void, DynamicPropertyBase, read_value_from, stream, index);
-    }
-};
-
-class TypePublicist : public Type
-{
-public:
-    using Type::m_kind;
-};
-
-class TypeSystemPublicist : public TypeSystem
-{
-public:
-    using TypeSystem::define_type;
-};
-
-class PropertyListPublicist : public PropertyList
-{
-public:
-    using PropertyList::add_property;
-};
+        void instantiate(PropertyClass &object) const override
+        {
+            PYBIND11_OVERLOAD(void, PropertyDef, instantiate, object);
+        }
+    };
 }
 
 PYBIND11_MODULE(pclass, m)
 {
-    // Submodules
-    py::module primitive_types_submodule = m.def_submodule("primitive_types");
+    // Declare py::object->integer value casters.
+    DECLARE_VALUE_CASTER(bool);
+    DECLARE_INTEGER_VALUE_CASTER(int8_t, uint8_t);
+    DECLARE_INTEGER_VALUE_CASTER(int16_t, uint16_t);
+    DECLARE_INTEGER_VALUE_CASTER(int32_t, uint32_t);
+    DECLARE_INTEGER_VALUE_CASTER(int64_t, uint64_t);
+    
+    // Declare py::object->BitInteger value casters.
+    DECLARE_BIT_INTEGER_VALUE_CASTER(1);
+    DECLARE_BIT_INTEGER_VALUE_CASTER(2);
+    DECLARE_BIT_INTEGER_VALUE_CASTER(3);
+    DECLARE_BIT_INTEGER_VALUE_CASTER(4);
+    DECLARE_BIT_INTEGER_VALUE_CASTER(5);
+    DECLARE_BIT_INTEGER_VALUE_CASTER(6);
+    DECLARE_BIT_INTEGER_VALUE_CASTER(7);
+    DECLARE_BIT_INTEGER_VALUE_CASTER(24);
+
+    // Declare py::object->floating point value casters.
+    DECLARE_VALUE_CASTER(float);
+    DECLARE_VALUE_CASTER(double);
+
+    // Declare py::object->string value casters.
+    DECLARE_VALUE_CASTER(std::string);
+    DECLARE_VALUE_CASTER(std::u16string);
+
+    // Declare py::object->PropertyClass value caster.
+    // DECLARE_VALUE_CASTER(PropertyClass);
 
     // Classes
-    py::class_<Type, PyType> type_cls(m, "Type");
-    py::class_<TypeSystem> type_system_cls(m, "TypeSystem");
-    py::class_<PropertyClass> property_class_cls(m, "PropertyClass", py::metaclass((PyObject *)&PyType_Type));
-    py::class_<PropertyList> property_list_cls(m, "PropertyList");
-    py::class_<PropertyBase, PyPropertyBase> property_base_cls(m, "PropertyBase");
-    py::class_<DynamicPropertyBase, PropertyBase, PyDynamicPropertyBase> dynamic_property_base_cls(m, "DynamicPropertyBase");
-
     py::class_<HashCalculator, PyHashCalculator>(m, "HashCalculator")
         .def(py::init<>())
         .def("calculate_type_hash", &HashCalculator::calculate_type_hash, "name"_a)
@@ -190,144 +627,146 @@ PYBIND11_MODULE(pclass, m)
         .value("CLASS", Type::kind::CLASS)
         .value("ENUM", Type::kind::ENUM);
 
+    py::class_<Type> type_cls(m, "Type");
+    py::class_<TypeSystem> _type_system_cls(m, "_TypeSystem");
+    py::class_<PyTypeSystem, TypeSystem> type_system_cls(m, "TypeSystem");
+    py::class_<PropertyDef, PyPropertyDef> property_def_cls(m, "PropertyDef");
+    py::class_<StaticPropertyDef, PropertyDef> static_property_def_cls(m, "StaticProperty");
+    py::class_<VectorPropertyDef, PropertyDef> vector_property_def_cls(m, "VectorProperty");
+    py::class_<PropertyClass> property_class_cls(m, "PropertyClass", py::metaclass((PyObject *)&PyType_Type));
+
     // Type Definitions
-    type_cls.def(py::init<const std::string &, const TypeSystem &>(), "name"_a, "type_system"_a);
-    type_cls.def_readwrite("kind", &TypePublicist::m_kind);
+    type_cls.def(py::init<const std::string &, const TypeSystem &>(),
+        "name"_a, "type_system"_a);
     type_cls.def_property_readonly("name", &Type::get_name);
     type_cls.def_property_readonly("hash", &Type::get_hash);
+    type_cls.def_readwrite("kind", &TypePublicist::m_kind);
     type_cls.def_property_readonly("type_system", &Type::get_type_system);
-    type_cls.def("instantiate", &Type::instantiate, py::return_value_policy::take_ownership);
 
-    // PrimitiveType Definitions
-    def_primitive_type_class<bool>(primitive_types_submodule, "_bool_PrimitiveType");
-    def_primitive_type_class<int8_t>(primitive_types_submodule, "_int8_PrimitiveType");
-    def_primitive_type_class<uint8_t>(primitive_types_submodule, "_uint8_PrimitiveType");
-    def_primitive_type_class<int16_t>(primitive_types_submodule, "_int16_PrimitiveType");
-    def_primitive_type_class<uint16_t>(primitive_types_submodule, "_uint16_PrimitiveType");
-    def_primitive_type_class<int32_t>(primitive_types_submodule, "_int32_PrimitiveType");
-    def_primitive_type_class<uint32_t>(primitive_types_submodule, "_uint32_PrimitiveType");
-    def_primitive_type_class<int64_t>(primitive_types_submodule, "_int64_PrimitiveType");
-    def_primitive_type_class<uint64_t>(primitive_types_submodule, "_uint64_PrimitiveType");
-
-    def_primitive_type_class<ki::bi<1>>(primitive_types_submodule, "_bi1_PrimitiveType");
-    def_primitive_type_class<ki::bi<2>>(primitive_types_submodule, "_bi2_PrimitiveType");
-    def_primitive_type_class<ki::bi<3>>(primitive_types_submodule, "_bi3_PrimitiveType");
-    def_primitive_type_class<ki::bi<4>>(primitive_types_submodule, "_bi4_PrimitiveType");
-    def_primitive_type_class<ki::bi<5>>(primitive_types_submodule, "_bi5_PrimitiveType");
-    def_primitive_type_class<ki::bi<6>>(primitive_types_submodule, "_bi6_PrimitiveType");
-    def_primitive_type_class<ki::bi<7>>(primitive_types_submodule, "_bi7_PrimitiveType");
-    def_primitive_type_class<ki::bi<24>>(primitive_types_submodule, "_bi24_PrimitiveType");
-
-    def_primitive_type_class<ki::bui<1>>(primitive_types_submodule, "_bui1_PrimitiveType");
-    def_primitive_type_class<ki::bui<2>>(primitive_types_submodule, "_bui2_PrimitiveType");
-    def_primitive_type_class<ki::bui<3>>(primitive_types_submodule, "_bui3_PrimitiveType");
-    def_primitive_type_class<ki::bui<4>>(primitive_types_submodule, "_bui4_PrimitiveType");
-    def_primitive_type_class<ki::bui<5>>(primitive_types_submodule, "_bui5_PrimitiveType");
-    def_primitive_type_class<ki::bui<6>>(primitive_types_submodule, "_bui6_PrimitiveType");
-    def_primitive_type_class<ki::bui<7>>(primitive_types_submodule, "_bui7_PrimitiveType");
-    def_primitive_type_class<ki::bui<24>>(primitive_types_submodule, "_bui24_PrimitiveType");
-
-    def_primitive_type_class<float>(primitive_types_submodule, "_float_PrimitiveType");
-    def_primitive_type_class<double>(primitive_types_submodule, "_double_PrimitiveType");
-
-    def_primitive_type_class<std::string>(primitive_types_submodule, "_string_PrimitiveType");
-    def_primitive_type_class<std::wstring>(primitive_types_submodule, "_wstring_PrimitiveType");
+    // _TypeSystem Definitions
+    _type_system_cls.def("__init__", [](TypeSystem &self, HashCalculator &hash_calculator)
+    {
+        new (&self) TypeSystem { std::unique_ptr<HashCalculator>(&hash_calculator) };
+    });
+    _type_system_cls.def_property_readonly("hash_calculator",
+        &TypeSystem::get_hash_calculator, py::return_value_policy::reference);
+    _type_system_cls.def("has_type",
+        static_cast<bool (TypeSystem::*)(const std::string &) const>(&TypeSystem::has_type), "name"_a);
+    _type_system_cls.def("__contains__",
+        static_cast<bool (TypeSystem::*)(const std::string &) const>(&TypeSystem::has_type));
+    _type_system_cls.def("has_type",
+        static_cast<bool (TypeSystem::*)(hash_t) const>(&TypeSystem::has_type), "hash"_a);
+    _type_system_cls.def("__contains__",
+        static_cast<bool (TypeSystem::*)(hash_t) const>(&TypeSystem::has_type));
+    _type_system_cls.def("get_type",
+        static_cast<const Type &(TypeSystem::*)(const std::string &) const>(&TypeSystem::get_type),
+        "name"_a, py::return_value_policy::reference_internal);
+    _type_system_cls.def("__getitem__",
+        static_cast<const Type &(TypeSystem::*)(const std::string &) const>(&TypeSystem::get_type),
+        py::return_value_policy::reference_internal);
+    _type_system_cls.def("get_type",
+        static_cast<const Type &(TypeSystem::*)(hash_t) const>(&TypeSystem::get_type),
+        "hash"_a, py::return_value_policy::reference_internal);
+    _type_system_cls.def("__getitem__",
+        static_cast<const Type &(TypeSystem::*)(hash_t) const>(&TypeSystem::get_type),
+        py::return_value_policy::reference_internal);
 
     // TypeSystem Definitions
-    type_system_cls.def(py::init<HashCalculator *>(), "hash_calculator"_a);
-    type_system_cls.def("__contains__",
-        static_cast<bool (TypeSystem::*)(const std::string &) const>(&TypeSystem::has_type));
-    type_system_cls.def("__contains__",
-        static_cast<bool (TypeSystem::*)(hash_t) const>(&TypeSystem::has_type));
-    type_system_cls.def("__getitem__", 
-        static_cast<const Type &(TypeSystem::*)(const std::string &) const>(&TypeSystem::get_type),
-        py::return_value_policy::reference);
-    type_system_cls.def("__getitem__",
-        static_cast<const Type &(TypeSystem::*)(hash_t) const>(&TypeSystem::get_type),
-        py::return_value_policy::reference);
-    type_system_cls.def_property("hash_calculator",
-        &TypeSystem::get_hash_calculator,
-        &TypeSystem::set_hash_calculator, py::return_value_policy::reference);
-    type_system_cls.def("has_type",
-        static_cast<bool (TypeSystem::*)(const std::string &) const>(&TypeSystem::has_type), "name"_a);
-    type_system_cls.def("has_type",
-        static_cast<bool (TypeSystem::*)(hash_t) const>(&TypeSystem::has_type), "hash"_a);
-    type_system_cls.def("get_type",
-        static_cast<const Type &(TypeSystem::*)(const std::string &) const>(&TypeSystem::get_type),
-        "name"_a, py::return_value_policy::reference);
-    type_system_cls.def("get_type",
-        static_cast<const Type &(TypeSystem::*)(hash_t) const>(&TypeSystem::get_type),
-        "hash"_a, py::return_value_policy::reference);
-    type_system_cls.def("define_type", &TypeSystemPublicist::define_type, "type"_a);
+    type_system_cls.def("__init__", [](PyTypeSystem &self, HashCalculator *hash_calculator)
+    {
+        new (&self) PyTypeSystem { std::unique_ptr<HashCalculator>(hash_calculator) };
+    });
+    type_system_cls.def("define_class", &PyTypeSystem::define_class,
+        "name"_a, "cls"_a, "base_class"_a);
+    type_system_cls.def("instantiate", &PyTypeSystem::instantiate,
+        py::return_value_policy::take_ownership, "name"_a);
+
+    // PropertyDef Definitions
+    property_def_cls.def(py::init<const std::string &, const std::string &, bool>(),
+        "name"_a, "type_name"_a, "is_pointer"_a = false);
+    property_def_cls.def("instantiate", &PropertyDef::instantiate, "object"_a);
+
+    // StaticPropertyDef Definitions
+    static_property_def_cls.def(py::init<const std::string &, const std::string &, bool>(),
+        "name"_a, "type_name"_a, "is_pointer"_a = false);
+    static_property_def_cls.def("__get__", [](const StaticPropertyDef &self, const py::object &instance, const py::object &owner)
+    {
+        // Are we attempting to read the value of this property from a
+        // PropertyClass instance?
+        if (py::isinstance<PropertyClass>(instance))
+        {
+            // Yep. Read the value of the property.
+            const auto &object = instance.cast<const PropertyClass &>();
+            const PropertyList &properties = object.get_properties();
+            const IProperty &prop = properties.get_property(self.get_name());
+
+            // Cast the property to a PyStaticProperty.
+            const auto &static_prop = dynamic_cast<const PyStaticProperty &>(prop);
+            return static_prop.get();
+        }
+
+        // Nope. Simply return this PropertyDef instance.
+        return py::cast(self);
+    }, py::return_value_policy::reference_internal);
+    static_property_def_cls.def("__set__", [](const StaticPropertyDef &self, py::object &instance, py::object &value)
+    {
+        // Are we attempting to set the value of this property on a
+        // PropertyClass instance?
+        if (py::isinstance<PropertyClass>(instance))
+        {
+            // Yep. Set the value of the property.
+            auto &object = instance.cast<PropertyClass &>();
+            PropertyList &properties = object.get_properties();
+            IProperty &prop = properties.get_property(self.get_name());
+
+            // Cast the property to a PyStaticProperty.
+            auto &static_prop = dynamic_cast<PyStaticProperty &>(prop);
+            static_prop.set(value);
+        }
+    });
+
+    // VectorPropertyDef Definitions
+    vector_property_def_cls.def(py::init<const std::string &, const std::string &, bool>(),
+        "name"_a, "type_name"_a, "is_pointer"_a = false);
+    vector_property_def_cls.def("__get__", [](const VectorPropertyDef &self, const py::object &instance, const py::object &owner)
+    {
+        // Are we attempting to read the value of this property from a
+        // PropertyClass instance?
+        if (py::isinstance<PropertyClass>(instance))
+        {
+            // Yep. Read the value of the property.
+            const auto &object = instance.cast<const PropertyClass &>();
+            const PropertyList &properties = object.get_properties();
+            const IProperty &prop = properties.get_property(self.get_name());
+
+            // Cast the property to a PyVectorProperty.
+            const auto &vector_prop = dynamic_cast<const PyVectorProperty &>(prop);
+            return py::object(vector_prop.get());
+        }
+
+        // Nope. Simply return this PropertyDef instance.
+        return py::cast(self);
+    }, py::return_value_policy::reference_internal);
+    vector_property_def_cls.def("__set__", [](const VectorPropertyDef &self, py::object &instance, py::object &value)
+    {
+        // Are we attempting to set the value of this property on a
+        // PropertyClass instance?
+        if (py::isinstance<PropertyClass>(instance))
+        {
+            // Yep. Set the value of the property.
+            auto &object = instance.cast<PropertyClass &>();
+            PropertyList &properties = object.get_properties();
+            IProperty &prop = properties.get_property(self.get_name());
+
+            // Cast the property to a PyVectorProperty.
+            auto &vector_prop = dynamic_cast<PyVectorProperty &>(prop);
+            vector_prop.set(value);
+        }
+    });
 
     // PropertyClass Definitions
     property_class_cls.def(py::init<const Type &, const TypeSystem &>(), "type"_a, "type_system"_a);
-    property_class_cls.def_property_readonly("type", &PropertyClass::get_type, py::return_value_policy::reference);
-    property_class_cls.def_property_readonly("properties",
-        static_cast<PropertyList &(PropertyClass::*)()>(&PropertyClass::get_properties),
-        py::return_value_policy::reference);
-
-    // PropertyList Definitions
-    property_list_cls.def(py::init<>());
-    property_list_cls.def("__contains__",
-        static_cast<bool (PropertyList::*)(const std::string &) const>(&PropertyList::has_property));
-    property_list_cls.def("__contains__",
-        static_cast<bool (PropertyList::*)(hash_t) const>(&PropertyList::has_property));
-    property_list_cls.def("__getitem__",
-        static_cast<const PropertyBase &(PropertyList::*)(int) const>(&PropertyList::get_property),
-        py::return_value_policy::reference);
-    property_list_cls.def("__getitem__",
-        static_cast<const PropertyBase &(PropertyList::*)(const std::string &) const>(&PropertyList::get_property),
-        py::return_value_policy::reference);
-    property_list_cls.def("__getitem__",
-        static_cast<const PropertyBase &(PropertyList::*)(hash_t) const>(&PropertyList::get_property),
-        py::return_value_policy::reference);
-    property_list_cls.def("__iter__", [](const PropertyList &self)
-    {
-        return py::make_iterator(self.begin(), self.end());
-    }, py::keep_alive<0, 1>());
-    property_list_cls.def_property_readonly("property_count", &PropertyList::get_property_count);
-    property_list_cls.def("has_property",
-        static_cast<bool (PropertyList::*)(const std::string &) const>(&PropertyList::has_property), "name"_a);
-    property_list_cls.def("has_property",
-        static_cast<bool (PropertyList::*)(hash_t) const>(&PropertyList::has_property), "hash"_a);
-    property_list_cls.def("get_property",
-        static_cast<const PropertyBase &(PropertyList::*)(int) const>(&PropertyList::get_property),
-        "name"_a, py::return_value_policy::reference);
-    property_list_cls.def("get_property",
-        static_cast<const PropertyBase &(PropertyList::*)(const std::string &) const>(&PropertyList::get_property),
-        "hash"_a, py::return_value_policy::reference);
-    property_list_cls.def("get_property",
-        static_cast<const PropertyBase &(PropertyList::*)(hash_t) const>(&PropertyList::get_property),
-        "hash"_a, py::return_value_policy::reference);
-    property_list_cls.def("add_property", &PropertyListPublicist::add_property, "prop"_a);
-
-    // PropertyBase Definitions
-    property_base_cls.def(py::init<PropertyClass &, const std::string &, const Type &>(),
-        "obj"_a, "name"_a, "type"_a);
-    property_base_cls.def_property_readonly("name", &PropertyBase::get_name);
-    property_base_cls.def_property_readonly("name_hash", &PropertyBase::get_name_hash);
-    property_base_cls.def_property_readonly("full_hash", &PropertyBase::get_full_hash);
-    property_base_cls.def_property_readonly("type", &PropertyBase::get_type, py::return_value_policy::reference);
-    property_base_cls.def("is_pointer", &PropertyBase::is_pointer);
-    property_base_cls.def("is_dynamic", &PropertyBase::is_dynamic);
-    property_base_cls.def("get_object", &PropertyBase::get_object);
-    property_base_cls.def("write_value_to", &PropertyBase::write_value_to, "stream"_a);
-    property_base_cls.def("read_value_from", &PropertyBase::read_value_from, "stream"_a);
-
-    // DynamicPropertyBase Definitions
-    dynamic_property_base_cls.def(py::init<PropertyClass &, const std::string &, const Type &>(),
-        "obj"_a, "name"_a, "type"_a);
-    dynamic_property_base_cls.def("get_element_count", &DynamicPropertyBase::get_element_count);
-    dynamic_property_base_cls.def("get_object",
-        static_cast<const PropertyClass *(DynamicPropertyBase::*)(int) const>(&DynamicPropertyBase::get_object),
-        "index"_a);
-    dynamic_property_base_cls.def("write_value_to",
-        static_cast<void (DynamicPropertyBase::*)(BitStream &, int) const>(&DynamicPropertyBase::write_value_to),
-        "stream"_a, "index"_a);
-    dynamic_property_base_cls.def("read_value_from",
-        static_cast<void (DynamicPropertyBase::*)(BitStream &, int)>(&DynamicPropertyBase::read_value_from),
-        "stream"_a, "index"_a);
+    property_class_cls.def_property_readonly("type", &PropertyClass::get_type);
 }
 
 }

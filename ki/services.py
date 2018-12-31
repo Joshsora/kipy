@@ -50,8 +50,13 @@ class Service(object):
     """The base for any class that wishes to house a message handler."""
     logger = logging.getLogger('SERVICE')
 
-    def __init__(self, message_mgr):
-        self.message_mgr = message_mgr
+    def __init__(self, participant):
+        self.participant = participant
+        self.message_mgr = participant.message_mgr
+
+        # Register our message handlers.
+        for message_handler in self.iter_message_handlers():
+            participant.register_message_handler(message_handler)
 
     def iter_message_handlers(self):
         """A generator that can be used to iterate over all of the
@@ -73,12 +78,9 @@ class ServiceParticipant(object):
         self.message_mgr = MessageManager()
         self.message_handlers = {}
 
-    def register_service(self, service):
-        """Adds the given service's message handlers to our managed
-        message handlers.
-        """
-        for message_handler in service.iter_message_handlers():
-            self.message_handlers[message_handler.name] = message_handler
+    def register_message_handler(self, message_handler):
+        """Registers the given message handler as a managed one."""
+        self.message_handlers[message_handler.name] = message_handler
 
     def handle_message(self, sender, message):
         """Invokes the correct message handler for the given message."""
