@@ -6,4 +6,4 @@ from . import pclass
 from . import services
 from . import tasks
 from . import util
-from .lib import serialization
+from . import serialization

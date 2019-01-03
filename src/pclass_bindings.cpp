@@ -1,3 +1,4 @@
+#include <python.h>
 #include <pybind11/pybind11.h>
 
 #include <string>
@@ -8,8 +9,8 @@
 #include <ki/util/unique.h>
 #include <ki/util/BitTypes.h>
 #include <ki/pclass/Value.h>
-#include <ki/pclass/types/Type.h>
-#include <ki/pclass/types/PrimitiveType.h>
+#include <ki/pclass/Type.h>
+#include <ki/pclass/PrimitiveType.h>
 #include <ki/pclass/TypeSystem.h>
 #include <ki/pclass/HashCalculator.h>
 #include <ki/pclass/PropertyClass.h>
@@ -67,10 +68,75 @@ namespace detail
     struct is_py_assignable<std::u16string> : std::true_type {};
 
     /**
-    * BitInteger can be assigned to a py::object.
+    * PropertyClass can be assigned to a py::object.
     */
-    template <uint8_t N, bool Unsigned>
-    struct is_py_assignable<BitInteger<N, Unsigned>> : std::true_type {};
+    template <>
+    struct is_py_assignable<PropertyClass> : std::true_type {};
+
+    /**
+    * value_caster specialization for casting any py::object-assignable
+    * value to a py::object.
+    */
+    template <typename SrcT>
+    struct value_caster<
+        SrcT, py::object,
+        typename std::enable_if<is_py_assignable<SrcT>::value>::type
+    > : value_caster_impl<SrcT, py::object>
+    {
+        py::object cast_value(const SrcT &value) const override
+        {
+            try
+            {
+                return py::cast(value);
+            }
+            catch (py::cast_error &e)
+            {
+                return bad_cast();
+            }
+        }
+    };
+
+    /**
+    * value_caster specialization for casting any signed bit integer
+    * value to a py::object.
+    */
+    template <uint8_t N>
+    struct value_caster<BitInteger<N, false>, py::object>
+        : value_caster_impl<BitInteger<N, false>, py::object>
+    {
+        py::object cast_value(const BitInteger<N, false> &value) const override
+        {
+            try
+            {
+                return py::cast(static_cast<int64_t>(value));
+            }
+            catch (py::cast_error &e)
+            {
+                return bad_cast();
+            }
+        }
+    };
+
+    /**
+    * value_caster specialization for casting any unsigned bit integer
+    * value to a py::object.
+    */
+    template <uint8_t N>
+    struct value_caster<BitInteger<N, true>, py::object>
+        : value_caster_impl<BitInteger<N, true>, py::object>
+    {
+        py::object cast_value(const BitInteger<N, true> &value) const override
+        {
+            try
+            {
+                return py::cast(static_cast<uint64_t>(value));
+            }
+            catch (py::cast_error &e)
+            {
+                return bad_cast();
+            }
+        }
+    };
 
     /**
     * value_caster specialization for casting py::object to any
@@ -92,6 +158,83 @@ namespace detail
             {
                 return bad_cast();
             }
+        }
+    };
+
+
+    /**
+    * value_caster specialization for casting py::object to any
+    * signed bit integer value that is <= 32 bits.
+    */
+    template <uint8_t N>
+    struct value_caster<
+        py::object, BitInteger<N, false>,
+        typename std::enable_if<(N <= 32)>::type
+    > : value_caster_impl<py::object, BitInteger<N, false>>
+    {
+        BitInteger<N, false> cast_value(const py::object &value) const override
+        {
+            auto *value_ptr = value.ptr();
+            if (PyLong_Check(value_ptr))
+                return PyLong_AsLong(value_ptr);
+            return bad_cast();
+        }
+    };
+
+    /**
+    * value_caster specialization for casting py::object to any
+    * signed bit integer value that is > 32 bits.
+    */
+    template <uint8_t N>
+    struct value_caster<
+        py::object, BitInteger<N, false>,
+        typename std::enable_if<(N > 32)>::type
+    > : value_caster_impl<py::object, BitInteger<N, false>>
+    {
+        BitInteger<N, false> cast_value(const py::object &value) const override
+        {
+            auto *value_ptr = value.ptr();
+            if (PyLong_Check(value_ptr))
+                return PyLong_AsLongLong(value_ptr);
+            return bad_cast();
+        }
+    };
+
+    /**
+    * value_caster specialization for casting py::object to any
+    * unsigned bit integer value that is <= 32 bits.
+    */
+    template <uint8_t N>
+    struct value_caster<
+        py::object, BitInteger<N, true>,
+        typename std::enable_if<(N <= 32)>::type
+    > : value_caster_impl<py::object, BitInteger<N, true>>
+    {
+        BitInteger<N, true> cast_value(const py::object &value) const override
+        {
+            auto *value_ptr = value.ptr();
+            if (PyLong_Check(value_ptr))
+                return PyLong_AsUnsignedLong(value_ptr);
+            return bad_cast();
+        }
+    };
+
+    /**
+    * value_caster specialization for casting py::object to any
+    * signed bit integer value that is > 32 bits.
+    */
+    template <uint8_t N>
+    struct value_caster<
+        py::object, BitInteger<N, true>,
+        typename std::enable_if<(N > 32)>::type
+    > : value_caster_impl<py::object, BitInteger<N, true>>
+    {
+        BitInteger<N, true> cast_value(const py::object &value) const override
+        {
+            auto *value_ptr = value.ptr();
+            if (PyLong_Check(value_ptr))
+                return PyLong_AsUnsignedLongLong(value_ptr);
+            return bad_cast();
         }
     };
 
@@ -117,20 +260,18 @@ namespace detail
     };
 
     /**
-    * value_caster specialization for casting any py::object-assignable
-    * value to a py::object.
+    * value_caster specialization for casting py::object to an
+    * std::u16string.
     */
-    template <typename SrcT>
-    struct value_caster<
-        SrcT, py::object,
-        typename std::enable_if<is_py_assignable<SrcT>::value>::type
-    > : value_caster_impl<SrcT, py::object>
+    template <>
+    struct value_caster<py::object, std::u16string>
+        : value_caster_impl<py::object, std::u16string>
     {
-        py::object cast_value(const SrcT &value) const override
+        std::u16string cast_value(const py::object &value) const override
         {
             try
             {
-                return py::cast(value);
+                return value.cast<std::u16string>();
             }
             catch (py::cast_error &e)
             {
@@ -138,28 +279,86 @@ namespace detail
             }
         }
     };
+
+    /**
+    * value_caster specialization for casting a py::object value to a
+    * nlohmann::json value.
+    */
+    template <>
+    struct value_caster<py::object, nlohmann::json>
+        : value_caster_impl<py::object, nlohmann::json>
+    {
+        nlohmann::json cast_value(const py::object &value) const override
+        {
+            auto *value_ptr = value.ptr();
+            if (PyBool_Check(value_ptr))
+                return static_cast<bool>(PyObject_IsTrue(value_ptr));
+            else if (PyLong_Check(value_ptr))
+                return PyLong_AsLong(value_ptr);
+            else if (PyFloat_Check(value_ptr))
+                return PyFloat_AsDouble(value_ptr);
+            else if (PyBytes_Check(value_ptr))
+                return PyBytes_AsString(value_ptr);
+            else if (PyUnicode_Check(value_ptr))
+                return PyUnicode_AsUTF8(value_ptr);
+            else if (!PyType_Check(value_ptr) &&
+                PyObject_HasAttrString(value_ptr, "__int__"))
+                return value.attr("__int__")().cast<long>();
+            else
+                return bad_cast();
+        }
+    };
+
+    /**
+    * value_caster specialization for casting a nlohmann::json to a
+    * py::object value.
+    */
+    template <>
+    struct value_caster<nlohmann::json, py::object>
+        : value_caster_impl<nlohmann::json, py::object>
+    {
+        py::object cast_value(const nlohmann::json &value) const override
+        {
+            if (value.is_null())
+                return py::cast(nullptr);
+            else if (value.is_boolean())
+                return py::cast(value.get<bool>());
+            else if (value.is_number_integer())
+                return py::cast(value.get<int64_t>());
+            else if (value.is_number_unsigned())
+                return py::cast(value.get<uint64_t>());
+            else if (value.is_number_float())
+                return py::cast(value.get<double>());
+            else if (value.is_string())
+                return py::cast(value.get<std::string>());
+            else
+                return bad_cast();
+        }
+    };
 }
 
 namespace
 {
     /**
-    * A Python alias class for HashCalculator.
+    * A Python alias class for IHashCalculator.
     */
-    class PyHashCalculator : public HashCalculator
+    class PyIHashCalculator : public IHashCalculator
     {
     public:
-        using HashCalculator::HashCalculator;
+        using IHashCalculator::IHashCalculator;
 
         hash_t calculate_type_hash(const std::string &name) const override
         {
-            PYBIND11_OVERLOAD_PURE(hash_t, HashCalculator, calculate_type_hash, name);
+            PYBIND11_OVERLOAD_PURE(hash_t, IHashCalculator, calculate_type_hash, name);
         }
 
         hash_t calculate_property_hash(const std::string &name) const override
         {
-            PYBIND11_OVERLOAD_PURE(hash_t, HashCalculator, calculate_property_hash, name);
+            PYBIND11_OVERLOAD_PURE(hash_t, IHashCalculator, calculate_property_hash, name);
         }
     };
+
+    class PyTypeSystem;
 
     /**
     * A Python-based ClassType.
@@ -187,10 +386,12 @@ namespace
         std::unique_ptr<PropertyClass> instantiate() const override
         {
             // Python only knows about the Type base class.
-            const auto &type = static_cast<const Type &>(*this);
+            const auto *type = static_cast<const Type *>(this);
+
+            // Cast TypeSystem to its Python-based counterpart.
+            const auto *type_system = reinterpret_cast<const PyTypeSystem *>(&get_type_system());
 
             // Instantiate the Python object.
-            py::object type_system = py::cast(get_type_system());  // Cast to PyTypeSystem
             py::object instance = m_cls(type, type_system);
 
             // Increment the reference count so that it isn't destroyed
@@ -204,9 +405,9 @@ namespace
             );
         }
 
-        void write_to(BitStream &stream, Value value) const override
+        void write_to(BitStream &stream, Value &value) const override
         {
-            const auto &object = value.dereference<PropertyClass>().get<PropertyClass>();
+            const auto &object = value.as<PropertyClass>().get<PropertyClass>();
             const auto &properties = object.get_properties();
             for (auto it = properties.begin(); it != properties.end(); ++it)
                 it->write_value_to(stream);
@@ -233,7 +434,40 @@ namespace
     class PyTypeSystem : public TypeSystem
     {
     public:
-        using TypeSystem::TypeSystem;
+        explicit PyTypeSystem(std::unique_ptr<IHashCalculator> &hash_calculator)
+            : TypeSystem(hash_calculator)
+        {
+            // Declare py::object->integer value casters.
+            DECLARE_VALUE_CASTER(bool);
+            DECLARE_INTEGER_VALUE_CASTER(int8_t, uint8_t);
+            DECLARE_INTEGER_VALUE_CASTER(int16_t, uint16_t);
+            DECLARE_INTEGER_VALUE_CASTER(int32_t, uint32_t);
+            DECLARE_INTEGER_VALUE_CASTER(int64_t, uint64_t);
+
+            // Declare py::object->BitInteger value casters.
+            DECLARE_BIT_INTEGER_VALUE_CASTER(1);
+            DECLARE_BIT_INTEGER_VALUE_CASTER(2);
+            DECLARE_BIT_INTEGER_VALUE_CASTER(3);
+            DECLARE_BIT_INTEGER_VALUE_CASTER(4);
+            DECLARE_BIT_INTEGER_VALUE_CASTER(5);
+            DECLARE_BIT_INTEGER_VALUE_CASTER(6);
+            DECLARE_BIT_INTEGER_VALUE_CASTER(7);
+            DECLARE_BIT_INTEGER_VALUE_CASTER(24);
+
+            // Declare py::object->floating point value casters.
+            DECLARE_VALUE_CASTER(float);
+            DECLARE_VALUE_CASTER(double);
+
+            // Declare py::object->string value casters.
+            DECLARE_VALUE_CASTER(std::string);
+            DECLARE_VALUE_CASTER(std::u16string);
+
+            // Declare py::object->PropertyClass value caster.
+            DECLARE_VALUE_CASTER(PropertyClass);
+
+            // Declare py::object->nlohmann::json value caster.
+            DECLARE_VALUE_CASTER(nlohmann::json);
+        }
 
         void define_class(const std::string &name, const py::object &cls, const Type *base_class)
         {
@@ -306,7 +540,7 @@ namespace
         {
             if (index < 0 || index >= get_element_count())
                 throw std::runtime_error("Index out of bounds.");
-            m_value = value.dereference<py::object>().get<py::object>();
+            m_value = value.as<py::object>().get<py::object>();
         }
 
         const PropertyClass *get_object(const std::size_t index) const override
@@ -399,7 +633,7 @@ namespace
             // Empty the list.
             m_list = py::list();
 
-            // Fill it with NoneTypes up to the desired size.
+            // Fill it with with the desired amount of nullptr elements.
             for (auto i = 0; i < size; i++)
                 m_list.append(nullptr);
         }
@@ -408,14 +642,14 @@ namespace
         {
             if (index < 0 || index >= get_element_count())
                 throw std::runtime_error("Index out of bounds.");
-            return Value::make_reference(m_list[index]);
+            return Value::make_value(py::object(m_list[index]));
         }
 
         void set_value(Value value, const std::size_t index) override
         {
             if (index < 0 || index >= get_element_count())
                 throw std::runtime_error("Index out of bounds.");
-            m_list[index] = value.dereference<py::object>().get<py::object>();
+            m_list[index] = value.as<py::object>().get<py::object>();
         }
 
         const PropertyClass *get_object(const std::size_t index) const override
@@ -425,7 +659,7 @@ namespace
 
             try
             {
-                return m_list[index].cast<const PropertyClass *>();
+                return py::object(m_list[index]).cast<const PropertyClass *>();
             }
             catch (py::cast_error &e)
             {
@@ -441,13 +675,15 @@ namespace
             if (index < 0 || index >= get_element_count())
                 throw std::runtime_error("Index out of bounds.");
 
-            py::object py_object = py::cast(dynamic_cast<PropertyClass *>(object.get()));
-            m_list[index] = py_object;
+            py::object instance = py::cast(
+                dynamic_cast<PropertyClass *>(object.get())
+            );
+            m_list[index] = instance;
 
             // This object was just instantiated, and as such now has a
             // reference count >= 2; decrement the reference count to
             // avoid memory leaks.
-            py_object.dec_ref();
+            instance.dec_ref();
         }
 
         py::list &get()
@@ -459,7 +695,7 @@ namespace
         {
             return m_list;
         }
-
+        
         void set(const py::list &value)
         {
             m_list = value;
@@ -562,8 +798,8 @@ namespace
 
         void instantiate(PropertyClass &object) const override
         {
-            const TypeSystem &type_system = object.get_type().get_type_system();
-            const Type &type = type_system.get_type(get_type_name());
+            const auto &type_system = object.get_type().get_type_system();
+            const auto &type = type_system.get_type(get_type_name());
             new PyVectorProperty(object, get_name(), type, is_pointer());
         }
     };
@@ -584,48 +820,20 @@ namespace
 
 PYBIND11_MODULE(pclass, m)
 {
-    // Declare py::object->integer value casters.
-    DECLARE_VALUE_CASTER(bool);
-    DECLARE_INTEGER_VALUE_CASTER(int8_t, uint8_t);
-    DECLARE_INTEGER_VALUE_CASTER(int16_t, uint16_t);
-    DECLARE_INTEGER_VALUE_CASTER(int32_t, uint32_t);
-    DECLARE_INTEGER_VALUE_CASTER(int64_t, uint64_t);
-    
-    // Declare py::object->BitInteger value casters.
-    DECLARE_BIT_INTEGER_VALUE_CASTER(1);
-    DECLARE_BIT_INTEGER_VALUE_CASTER(2);
-    DECLARE_BIT_INTEGER_VALUE_CASTER(3);
-    DECLARE_BIT_INTEGER_VALUE_CASTER(4);
-    DECLARE_BIT_INTEGER_VALUE_CASTER(5);
-    DECLARE_BIT_INTEGER_VALUE_CASTER(6);
-    DECLARE_BIT_INTEGER_VALUE_CASTER(7);
-    DECLARE_BIT_INTEGER_VALUE_CASTER(24);
-
-    // Declare py::object->floating point value casters.
-    DECLARE_VALUE_CASTER(float);
-    DECLARE_VALUE_CASTER(double);
-
-    // Declare py::object->string value casters.
-    DECLARE_VALUE_CASTER(std::string);
-    DECLARE_VALUE_CASTER(std::u16string);
-
-    // Declare py::object->PropertyClass value caster.
-    // DECLARE_VALUE_CASTER(PropertyClass);
-
     // Classes
-    py::class_<HashCalculator, PyHashCalculator>(m, "HashCalculator")
+    py::class_<IHashCalculator, PyIHashCalculator>(m, "IHashCalculator")
         .def(py::init<>())
-        .def("calculate_type_hash", &HashCalculator::calculate_type_hash, "name"_a)
-        .def("calculate_property_hash", &HashCalculator::calculate_property_hash, "name"_a);
+        .def("calculate_type_hash", &IHashCalculator::calculate_type_hash, "name"_a)
+        .def("calculate_property_hash", &IHashCalculator::calculate_property_hash, "name"_a);
 
-    py::class_<WizardHashCalculator, HashCalculator>(m, "WizardHashCalculator")
+    py::class_<WizardHashCalculator, IHashCalculator>(m, "WizardHashCalculator")
         .def(py::init<>());
 
-    py::enum_<Type::kind>(m, "TypeKind")
-        .value("NONE", Type::kind::NONE)
-        .value("PRIMITIVE", Type::kind::PRIMITIVE)
-        .value("CLASS", Type::kind::CLASS)
-        .value("ENUM", Type::kind::ENUM);
+    py::enum_<Type::Kind>(m, "TypeKind")
+        .value("NONE", Type::Kind::NONE)
+        .value("PRIMITIVE", Type::Kind::PRIMITIVE)
+        .value("CLASS", Type::Kind::CLASS)
+        .value("ENUM", Type::Kind::ENUM);
 
     py::class_<Type> type_cls(m, "Type");
     py::class_<TypeSystem> _type_system_cls(m, "_TypeSystem");
@@ -644,9 +852,9 @@ PYBIND11_MODULE(pclass, m)
     type_cls.def_property_readonly("type_system", &Type::get_type_system);
 
     // _TypeSystem Definitions
-    _type_system_cls.def("__init__", [](TypeSystem &self, HashCalculator &hash_calculator)
+    _type_system_cls.def("__init__", [](TypeSystem &self, IHashCalculator *hash_calculator)
     {
-        new (&self) TypeSystem { std::unique_ptr<HashCalculator>(&hash_calculator) };
+        new (&self) TypeSystem { std::unique_ptr<IHashCalculator>(hash_calculator) };
     });
     _type_system_cls.def_property_readonly("hash_calculator",
         &TypeSystem::get_hash_calculator, py::return_value_policy::reference);
@@ -672,9 +880,9 @@ PYBIND11_MODULE(pclass, m)
         py::return_value_policy::reference_internal);
 
     // TypeSystem Definitions
-    type_system_cls.def("__init__", [](PyTypeSystem &self, HashCalculator *hash_calculator)
+    type_system_cls.def("__init__", [](PyTypeSystem &self, IHashCalculator *hash_calculator)
     {
-        new (&self) PyTypeSystem { std::unique_ptr<HashCalculator>(hash_calculator) };
+        new (&self) PyTypeSystem { std::unique_ptr<IHashCalculator>(hash_calculator) };
     });
     type_system_cls.def("define_class", &PyTypeSystem::define_class,
         "name"_a, "cls"_a, "base_class"_a);
@@ -696,9 +904,9 @@ PYBIND11_MODULE(pclass, m)
         if (py::isinstance<PropertyClass>(instance))
         {
             // Yep. Read the value of the property.
-            const auto &object = instance.cast<const PropertyClass &>();
-            const PropertyList &properties = object.get_properties();
-            const IProperty &prop = properties.get_property(self.get_name());
+            const auto *object = instance.cast<const PropertyClass *>();
+            const auto &properties = object->get_properties();
+            const auto &prop = properties.get_property(self.get_name());
 
             // Cast the property to a PyStaticProperty.
             const auto &static_prop = dynamic_cast<const PyStaticProperty &>(prop);
@@ -715,9 +923,9 @@ PYBIND11_MODULE(pclass, m)
         if (py::isinstance<PropertyClass>(instance))
         {
             // Yep. Set the value of the property.
-            auto &object = instance.cast<PropertyClass &>();
-            PropertyList &properties = object.get_properties();
-            IProperty &prop = properties.get_property(self.get_name());
+            auto *object = instance.cast<PropertyClass *>();
+            auto &properties = object->get_properties();
+            auto &prop = properties.get_property(self.get_name());
 
             // Cast the property to a PyStaticProperty.
             auto &static_prop = dynamic_cast<PyStaticProperty &>(prop);
@@ -735,9 +943,9 @@ PYBIND11_MODULE(pclass, m)
         if (py::isinstance<PropertyClass>(instance))
         {
             // Yep. Read the value of the property.
-            const auto &object = instance.cast<const PropertyClass &>();
-            const PropertyList &properties = object.get_properties();
-            const IProperty &prop = properties.get_property(self.get_name());
+            const auto *object = instance.cast<const PropertyClass *>();
+            const auto &properties = object->get_properties();
+            const auto &prop = properties.get_property(self.get_name());
 
             // Cast the property to a PyVectorProperty.
             const auto &vector_prop = dynamic_cast<const PyVectorProperty &>(prop);
@@ -754,8 +962,8 @@ PYBIND11_MODULE(pclass, m)
         if (py::isinstance<PropertyClass>(instance))
         {
             // Yep. Set the value of the property.
-            auto &object = instance.cast<PropertyClass &>();
-            PropertyList &properties = object.get_properties();
+            auto *object = instance.cast<PropertyClass *>();
+            PropertyList &properties = object->get_properties();
             IProperty &prop = properties.get_property(self.get_name());
 
             // Cast the property to a PyVectorProperty.
@@ -765,8 +973,11 @@ PYBIND11_MODULE(pclass, m)
     });
 
     // PropertyClass Definitions
-    property_class_cls.def(py::init<const Type &, const TypeSystem &>(), "type"_a, "type_system"_a);
-    property_class_cls.def_property_readonly("type", &PropertyClass::get_type);
+    property_class_cls.def(py::init<const Type &, const TypeSystem &>(),
+        py::keep_alive<1, 2>(), py::keep_alive<1, 3>(),
+        "type"_a, "type_system"_a);
+    property_class_cls.def_property_readonly("type", &PropertyClass::get_type,
+        py::return_value_policy::reference);
 }
 
 }
