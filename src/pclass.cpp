@@ -27,17 +27,33 @@
     DECLARE_VALUE_CASTER(ut)
 
 #define DECLARE_BIT_INTEGER_VALUE_CASTER(n) \
-    DECLARE_VALUE_CASTER(bi<n>); \
-    DECLARE_VALUE_CASTER(bui<n>)
+    DECLARE_VALUE_CASTER(ki::bi<n>); \
+    DECLARE_VALUE_CASTER(ki::bui<n>)
 
 namespace py = pybind11;
+
 using namespace pybind11::literals;
+
+using ki::BitStream;
+
+using ki::pclass::hash_t;
+
+using ki::pclass::IHashCalculator;
+using ki::pclass::IClassType;
+using ki::pclass::IProperty;
+
+using ki::pclass::WizardHashCalculator;
+using ki::pclass::Value;
+using ki::pclass::ValueCaster;
+using ki::pclass::Type;
+using ki::pclass::TypeSystem;
+using ki::pclass::PropertyClass;
+using ki::pclass::PropertyList;
 
 namespace ki
 {
 namespace pclass
 {
-
 namespace detail
 {
     /**
@@ -101,10 +117,10 @@ namespace detail
     * value to a py::object.
     */
     template <uint8_t N>
-    struct value_caster<BitInteger<N, false>, py::object>
-        : value_caster_impl<BitInteger<N, false>, py::object>
+    struct value_caster<ki::BitInteger<N, false>, py::object>
+        : value_caster_impl<ki::BitInteger<N, false>, py::object>
     {
-        py::object cast_value(const BitInteger<N, false> &value) const override
+        py::object cast_value(const ki::BitInteger<N, false> &value) const override
         {
             try
             {
@@ -122,10 +138,10 @@ namespace detail
     * value to a py::object.
     */
     template <uint8_t N>
-    struct value_caster<BitInteger<N, true>, py::object>
-        : value_caster_impl<BitInteger<N, true>, py::object>
+    struct value_caster<ki::BitInteger<N, true>, py::object>
+        : value_caster_impl<ki::BitInteger<N, true>, py::object>
     {
-        py::object cast_value(const BitInteger<N, true> &value) const override
+        py::object cast_value(const ki::BitInteger<N, true> &value) const override
         {
             try
             {
@@ -168,11 +184,11 @@ namespace detail
     */
     template <uint8_t N>
     struct value_caster<
-        py::object, BitInteger<N, false>,
+        py::object, ki::BitInteger<N, false>,
         typename std::enable_if<(N <= 32)>::type
-    > : value_caster_impl<py::object, BitInteger<N, false>>
+    > : value_caster_impl<py::object, ki::BitInteger<N, false>>
     {
-        BitInteger<N, false> cast_value(const py::object &value) const override
+        ki::BitInteger<N, false> cast_value(const py::object &value) const override
         {
             auto *value_ptr = value.ptr();
             if (PyLong_Check(value_ptr))
@@ -187,11 +203,11 @@ namespace detail
     */
     template <uint8_t N>
     struct value_caster<
-        py::object, BitInteger<N, false>,
+        py::object, ki::BitInteger<N, false>,
         typename std::enable_if<(N > 32)>::type
-    > : value_caster_impl<py::object, BitInteger<N, false>>
+    > : value_caster_impl<py::object, ki::BitInteger<N, false>>
     {
-        BitInteger<N, false> cast_value(const py::object &value) const override
+        ki::BitInteger<N, false> cast_value(const py::object &value) const override
         {
             auto *value_ptr = value.ptr();
             if (PyLong_Check(value_ptr))
@@ -206,11 +222,11 @@ namespace detail
     */
     template <uint8_t N>
     struct value_caster<
-        py::object, BitInteger<N, true>,
+        py::object, ki::BitInteger<N, true>,
         typename std::enable_if<(N <= 32)>::type
-    > : value_caster_impl<py::object, BitInteger<N, true>>
+    > : value_caster_impl<py::object, ki::BitInteger<N, true>>
     {
-        BitInteger<N, true> cast_value(const py::object &value) const override
+        ki::BitInteger<N, true> cast_value(const py::object &value) const override
         {
             auto *value_ptr = value.ptr();
             if (PyLong_Check(value_ptr))
@@ -225,11 +241,11 @@ namespace detail
     */
     template <uint8_t N>
     struct value_caster<
-        py::object, BitInteger<N, true>,
+        py::object, ki::BitInteger<N, true>,
         typename std::enable_if<(N > 32)>::type
-    > : value_caster_impl<py::object, BitInteger<N, true>>
+    > : value_caster_impl<py::object, ki::BitInteger<N, true>>
     {
-        BitInteger<N, true> cast_value(const py::object &value) const override
+        ki::BitInteger<N, true> cast_value(const py::object &value) const override
         {
             auto *value_ptr = value.ptr();
             if (PyLong_Check(value_ptr))
@@ -335,6 +351,8 @@ namespace detail
                 return bad_cast();
         }
     };
+}
+}
 }
 
 namespace
@@ -444,7 +462,7 @@ namespace
             DECLARE_INTEGER_VALUE_CASTER(int32_t, uint32_t);
             DECLARE_INTEGER_VALUE_CASTER(int64_t, uint64_t);
 
-            // Declare py::object->BitInteger value casters.
+            // Declare py::object->ki::BitInteger value casters.
             DECLARE_BIT_INTEGER_VALUE_CASTER(1);
             DECLARE_BIT_INTEGER_VALUE_CASTER(2);
             DECLARE_BIT_INTEGER_VALUE_CASTER(3);
@@ -478,6 +496,20 @@ namespace
         {
             // Instantiate the PropertyClass, and cast it to its Python representation.
             const auto &type = get_type(name);
+            py::object instance = py::cast(type.instantiate().release());
+
+            // This object was just instantiated, and as such now has a
+            // reference count >= 2; decrement the reference count to avoid
+            // memory leaks.
+            instance.dec_ref();
+
+            return instance;
+        }
+
+        py::object instantiate(hash_t hash)
+        {
+            // Instantiate the PropertyClass, and cast it to its Python representation.
+            const auto &type = get_type(hash);
             py::object instance = py::cast(type.instantiate().release());
 
             // This object was just instantiated, and as such now has a
@@ -818,7 +850,7 @@ namespace
     };
 }
 
-PYBIND11_MODULE(pclass, m)
+void bind_pclass(py::module &m)
 {
     // Classes
     py::class_<IHashCalculator, PyIHashCalculator>(m, "IHashCalculator")
@@ -868,7 +900,7 @@ PYBIND11_MODULE(pclass, m)
         static_cast<bool (TypeSystem::*)(hash_t) const>(&TypeSystem::has_type));
     _type_system_cls.def("get_type",
         static_cast<const Type &(TypeSystem::*)(const std::string &) const>(&TypeSystem::get_type),
-        "name"_a, py::return_value_policy::reference_internal);
+        py::return_value_policy::reference_internal, "name"_a);
     _type_system_cls.def("__getitem__",
         static_cast<const Type &(TypeSystem::*)(const std::string &) const>(&TypeSystem::get_type),
         py::return_value_policy::reference_internal);
@@ -886,8 +918,12 @@ PYBIND11_MODULE(pclass, m)
     });
     type_system_cls.def("define_class", &PyTypeSystem::define_class,
         "name"_a, "cls"_a, "base_class"_a);
-    type_system_cls.def("instantiate", &PyTypeSystem::instantiate,
+    type_system_cls.def("instantiate",
+        static_cast<py::object (PyTypeSystem::*)(const std::string &)>(&PyTypeSystem::instantiate),
         py::return_value_policy::take_ownership, "name"_a);
+    type_system_cls.def("instantiate",
+        static_cast<py::object (PyTypeSystem::*)(hash_t)>(&PyTypeSystem::instantiate),
+        py::return_value_policy::take_ownership, "hash"_a);
 
     // PropertyDef Definitions
     property_def_cls.def(py::init<const std::string &, const std::string &, bool>(),
@@ -978,7 +1014,4 @@ PYBIND11_MODULE(pclass, m)
         "type"_a, "type_system"_a);
     property_class_cls.def_property_readonly("type", &PropertyClass::get_type,
         py::return_value_policy::reference);
-}
-
-}
 }

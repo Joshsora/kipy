@@ -17,32 +17,21 @@ class CMakeExtension(Extension):
 
 
 class CMakeBuild(build_ext):
+    def get_cmake_version(self):
+        try:
+            out = subprocess.check_output(['cmake', '--version'])
+        except OSError:
+            raise RuntimeError(
+                'CMake must be installed to build the following extensions: ' +
+                ', '.join(ext.name for ext in cmake_extensions))
+        return re.search(r'version\s*([\d.]+)', out.decode()).group(1)
+
     def run(self):
-        cmake_extensions = []
+        if LooseVersion(self.get_cmake_version()) < '3.1.0':
+            raise RuntimeError('CMake >= 3.1.0 is required')
+
         for ext in self.extensions:
-            cmake_extensions.append(ext)
-
-        if cmake_extensions:
-            try:
-                out = subprocess.check_output(['cmake', '--version'])
-            except OSError:
-                raise RuntimeError(
-                    'CMake must be installed to build the following extensions: ' +
-                    ', '.join(ext.name for ext in cmake_extensions))
-
-            cmake_version_match = re.search(r'version\s*([\d.]+)', out.decode())
-            cmake_version = LooseVersion(cmake_version_match.group(1))
-            if cmake_version < '3.1.0':
-                raise RuntimeError('CMake >= 3.1.0 is required')
-
-        build_ext.run(self)
-
-    def build_extensions(self):
-        for ext in self.extensions:
-            if isinstance(ext, CMakeExtension):
-                self.build_extension(ext)
-            else:
-                build_ext.build_extension(self, ext)
+            self.build_extension(ext)
 
     def build_extension(self, ext):
         ext_dir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
@@ -56,20 +45,20 @@ class CMakeBuild(build_ext):
             cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_%s=%s' % (cfg.upper(), ext_dir)]
             if sys.maxsize > 2**32:
                 cmake_args += ['-A', 'x64']
-            build_args += ['--', '/m']
+            build_args += ['--', '/m']  # Parallel build
         else:
             cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
-            build_args += ['--', '-j2']
+            build_args += ['--', '-j2']  # Parallel build
 
-        env = os.environ.copy()
-        env['CXXFLAGS'] = '%s -DVERSION_INFO="%s"' % \
-                          (env.get('CXXFLAGS', ''), self.distribution.get_version())
-        if not os.path.exists(self.build_temp):
-            os.makedirs(self.build_temp)
-        subprocess.check_call(['cmake', ext.src_dir] + cmake_args,
-                              cwd=self.build_temp, env=env)
-        subprocess.check_call(['cmake', '--build', '.'] + build_args,
-                              cwd=self.build_temp)
+        build_dir = os.path.abspath(self.build_temp)
+        if not os.path.exists(build_dir):
+            os.makedirs(build_dir)
+
+        cmake_setup = ['cmake', ext.src_dir] + cmake_args
+        subprocess.check_call(cmake_setup, cwd=self.build_temp)
+
+        cmake_build = ['cmake', '--build', '.'] + build_args
+        subprocess.check_call(cmake_build, cwd=self.build_temp)
 
 
 about = {}
@@ -81,7 +70,7 @@ with open(version_path, 'r', encoding='utf-8') as f:
 with open('README.md', 'r', encoding='utf-8') as f:
     long_description = f.read()
 
-setup_requires = ['pytest-runner']
+setup_requires = ['pytest-runner>=2.0,<3dev']
 install_requires = ['ruamel.yaml']
 tests_require = ['pytest>=3.0.0']
 
@@ -91,14 +80,8 @@ setup(
     author=about['__author__'],
     description=about['__description__'],
     long_description=long_description,
-    packages=find_packages(),
-    ext_modules=[
-        CMakeExtension('ki/lib/util'),
-        CMakeExtension('ki/lib/dml'),
-        CMakeExtension('ki/lib/protocol'),
-        CMakeExtension('ki/lib/pclass'),
-        CMakeExtension('ki/lib/serialization')
-    ],
+    packages=['ki'],
+    ext_modules=[CMakeExtension('ki/lib')],
     cmdclass={'build_ext': CMakeBuild},
     zip_safe=False,
     setup_requires=setup_requires,

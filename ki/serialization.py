@@ -1,2 +1,3 @@
+# Lift symbols from .lib.serialization...
 from .lib.serialization import BinarySerializerFlags, BinarySerializer, \
     JsonSerializer

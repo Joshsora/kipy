@@ -339,7 +339,7 @@ public:
     using ki::protocol::net::DMLSession::on_invalid_message;
 };
 
-PYBIND11_MODULE(protocol, m)
+void bind_protocol(py::module &m)
 {
     using namespace ki::protocol;
 

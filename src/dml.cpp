@@ -65,7 +65,7 @@
 
 namespace py = pybind11;
 
-PYBIND11_MODULE(dml, m)
+void bind_dml(py::module &m)
 {
     using namespace ki::dml;
 

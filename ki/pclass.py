@@ -1,6 +1,6 @@
 from . import lib
 
-# Lift symbols from .lib.pclass
+# Lift symbols from .lib.pclass...
 from .lib.pclass import IHashCalculator, WizardHashCalculator, TypeSystem, \
     StaticProperty, VectorProperty
 

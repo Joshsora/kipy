@@ -6,15 +6,20 @@
 #include <ki/pclass/TypeSystem.h>
 
 namespace py = pybind11;
+
 using namespace pybind11::literals;
 
-namespace ki
-{
-namespace serialization
+using ki::BitStream;
+
+using ki::pclass::TypeSystem;
+using ki::pclass::PropertyClass;
+
+using ki::serialization::BinarySerializer;
+using ki::serialization::JsonSerializer;
+
+void bind_serialization(py::module &m)
 {
 
-PYBIND11_MODULE(serialization, m)
-{
     // Classes
     py::class_<BinarySerializer> binary_serializer_cls(m, "BinarySerializer");
     py::class_<JsonSerializer> json_serializer_cls(m, "JsonSerializer");
@@ -25,7 +30,7 @@ PYBIND11_MODULE(serialization, m)
         .value("COMPRESSED", BinarySerializer::flags::COMPRESSED);
 
     // BinarySerializer Definitions
-    binary_serializer_cls.def(py::init<const pclass::TypeSystem &, bool, BinarySerializer::flags>(),
+    binary_serializer_cls.def(py::init<const TypeSystem &, bool, BinarySerializer::flags>(),
         "type_system"_a, "is_file"_a, "flags"_a);
     binary_serializer_cls.def("save", &BinarySerializer::save, "object"_a, "stream"_a);
     binary_serializer_cls.def("load", [](BinarySerializer &self, BitStream &stream, std::size_t size = 0)
@@ -35,7 +40,7 @@ PYBIND11_MODULE(serialization, m)
             size = stream.buffer().size();
 
         // Load the PropertyClass into our destination pointer.
-        std::unique_ptr<pclass::PropertyClass> dest = nullptr;
+        std::unique_ptr<PropertyClass> dest = nullptr;
         self.load(dest, stream, size);
 
         // Cast it to its Python representation.
@@ -50,13 +55,13 @@ PYBIND11_MODULE(serialization, m)
     }, py::return_value_policy::take_ownership, "stream"_a, "size"_a = 0);
 
     // JsonSerializer Definitions
-    json_serializer_cls.def(py::init<pclass::TypeSystem &, bool>(),
+    json_serializer_cls.def(py::init<TypeSystem &, bool>(),
         "type_system"_a, "is_file"_a);
     json_serializer_cls.def("save", &JsonSerializer::save, "object"_a);
     json_serializer_cls.def("load", [](JsonSerializer &self, const std::string &json_string)
     {
         // Load the PropertyClass into our destination pointer.
-        std::unique_ptr<pclass::PropertyClass> dest = nullptr;
+        std::unique_ptr<PropertyClass> dest = nullptr;
         self.load(dest, json_string);
 
         // Cast it to its Python representation.
@@ -69,7 +74,4 @@ PYBIND11_MODULE(serialization, m)
 
         return instance;
     }, py::return_value_policy::take_ownership, "json_string"_a);
-}
-
-}
 }

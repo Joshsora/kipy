@@ -11,17 +11,20 @@
 #include <ki/util/BitStream.h>
 
 namespace py = pybind11;
+
 using namespace pybind11::literals;
 
-namespace ki
-{
+using ki::IBitBuffer;
+using ki::BitBuffer;
+using ki::BitBufferSegment;
+using ki::BitStream;
 
 namespace
 {
 template <uint8_t N, bool Unsigned>
 void def_bit_integer_class(py::module &m)
 {
-    using Class = BitInteger<N, Unsigned>;
+    using Class = ki::BitInteger<N, Unsigned>;
 
     std::string name;
     if (Unsigned)
@@ -55,7 +58,7 @@ void def_bit_integer_class(py::module &m)
             oss << "(" << std::to_string(self.attr("__int__")().cast<type>()) << ")";
             return oss.str();
         })
-        .def("__int__", [](BitInteger<N, Unsigned> &self)
+        .def("__int__", [](ki::BitInteger<N, Unsigned> &self)
         {
             return static_cast<type>(self);
         });
@@ -105,7 +108,7 @@ public:
 };
 }
 
-PYBIND11_MODULE(util, m)
+void bind_util(py::module &m)
 {
     // Submodules
     py::module bit_types_submodule = m.def_submodule("bit_types");
@@ -155,7 +158,7 @@ PYBIND11_MODULE(util, m)
     i_bit_buffer_cls.def("resize", &IBitBuffer::resize, "new_size"_a);
     i_bit_buffer_cls.def("segment", &IBitBuffer::segment,
         py::return_value_policy::take_ownership, "from"_a, "bitsize"_a);
-    i_bit_buffer_cls.def("read_signed", [](const IBitBuffer &self, IBitBuffer::buffer_pos position, const uint8_t bits = bitsizeof<int64_t>::value)
+    i_bit_buffer_cls.def("read_signed", [](const IBitBuffer &self, IBitBuffer::buffer_pos position, const uint8_t bits = ki::bitsizeof<int64_t>::value)
     {
         int64_t value = self.read<int64_t>(position, bits);
         if (bits < 64)
@@ -167,11 +170,11 @@ PYBIND11_MODULE(util, m)
         return value;
     }, "position"_a, "bits"_a);
     i_bit_buffer_cls.def("read_unsigned", &IBitBuffer::read<uint64_t>,
-        "position"_a, "bits"_a = bitsizeof<uint64_t>::value);
+        "position"_a, "bits"_a = ki::bitsizeof<uint64_t>::value);
     i_bit_buffer_cls.def("write_signed", &IBitBuffer::write<int64_t>,
-        "value"_a, "position"_a, "bits"_a = bitsizeof<int64_t>::value);
+        "value"_a, "position"_a, "bits"_a = ki::bitsizeof<int64_t>::value);
     i_bit_buffer_cls.def("write_unsigned", &IBitBuffer::write<uint64_t>,
-        "value"_a, "position"_a, "bits"_a = bitsizeof<uint64_t>::value);
+        "value"_a, "position"_a, "bits"_a = ki::bitsizeof<uint64_t>::value);
 
     // BitBuffer Definitions
     bit_buffer_cls.def(py::init<std::size_t>(), "buffer_size"_a = KI_BITBUFFER_DEFAULT_SIZE);
@@ -195,7 +198,7 @@ PYBIND11_MODULE(util, m)
     bit_stream_cls.def("seek", &BitStream::seek, "position"_a, "expand"_a);
     bit_stream_cls.def_property_readonly("capacity", &BitStream::capacity);
     bit_stream_cls.def_property_readonly("buffer", &BitStream::buffer);
-    bit_stream_cls.def("read_signed", [](BitStream &self, const uint8_t bits = bitsizeof<int64_t>::value)
+    bit_stream_cls.def("read_signed", [](BitStream &self, const uint8_t bits = ki::bitsizeof<int64_t>::value)
     {
         int64_t value = self.read<int64_t>(bits);
         if (bits < 64)
@@ -207,11 +210,9 @@ PYBIND11_MODULE(util, m)
         return value;
     }, "bits"_a);
     bit_stream_cls.def("read_unsigned", &BitStream::read<uint64_t>,
-        "bits"_a = bitsizeof<uint64_t>::value);
+        "bits"_a = ki::bitsizeof<uint64_t>::value);
     bit_stream_cls.def("write_signed", &BitStream::write<int64_t>,
-        "value"_a, "bits"_a = bitsizeof<int64_t>::value);
+        "value"_a, "bits"_a = ki::bitsizeof<int64_t>::value);
     bit_stream_cls.def("write_unsigned", &BitStream::write<uint64_t>,
-        "value"_a, "bits"_a = bitsizeof<uint64_t>::value);
-}
-
+        "value"_a, "bits"_a = ki::bitsizeof<uint64_t>::value);
 }
