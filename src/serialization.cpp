@@ -24,7 +24,7 @@ void bind_serialization(py::module &m)
     py::class_<BinarySerializer> binary_serializer_cls(m, "BinarySerializer");
     py::class_<JsonSerializer> json_serializer_cls(m, "JsonSerializer");
 
-    py::enum_<BinarySerializer::flags>(m, "BinarySerializerFlags")
+    py::enum_<BinarySerializer::flags>(m, "BinarySerializerFlags", py::arithmetic())
         .value("NONE", BinarySerializer::flags::NONE)
         .value("WRITE_SERIALIZER_FLAGS", BinarySerializer::flags::WRITE_SERIALIZER_FLAGS)
         .value("COMPRESSED", BinarySerializer::flags::COMPRESSED);

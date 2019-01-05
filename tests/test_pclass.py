@@ -1,4 +1,5 @@
 import pytest
+
 from ki.pclass import WizardHashCalculator, TypeSystem, PropertyClassMeta, \
     PropertyClass
 

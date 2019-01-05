@@ -1,0 +1,6 @@
+*
+!.gitignore
+!regular.bin
+!file.bin
+!regular_compressed.bin
+!file_compressed.bin
