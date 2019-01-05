@@ -376,7 +376,18 @@ namespace
         }
     };
 
-    class PyTypeSystem;
+    /**
+    * A Python-based TypeSystem.
+    * Provides a method for defining Python-based class types, and
+    * declares py::object value casters.
+    */
+    class PyTypeSystem : public TypeSystem
+    {
+    public:
+        explicit PyTypeSystem(std::unique_ptr<IHashCalculator> &hash_calculator);
+
+        void define_class(const std::string &name, const py::object &cls, const Type *base_class);
+    };
 
     /**
     * A Python-based ClassType.
@@ -407,7 +418,7 @@ namespace
             const auto *type = static_cast<const Type *>(this);
 
             // Cast TypeSystem to its Python-based counterpart.
-            const auto *type_system = reinterpret_cast<const PyTypeSystem *>(&get_type_system());
+            const auto *type_system = dynamic_cast<const PyTypeSystem *>(&get_type_system());
 
             // Instantiate the Python object.
             py::object instance = m_cls(type, type_system);
@@ -444,82 +455,49 @@ namespace
         py::object m_cls;
     };
 
-    /**
-    * A Python-based TypeSystem.
-    * Provides a method for defining class types, and instantiating
-    * Python-defined PropertyClass objects.
-    */
-    class PyTypeSystem : public TypeSystem
+    PyTypeSystem::PyTypeSystem(std::unique_ptr<IHashCalculator> &hash_calculator)
+        : TypeSystem(hash_calculator)
     {
-    public:
-        explicit PyTypeSystem(std::unique_ptr<IHashCalculator> &hash_calculator)
-            : TypeSystem(hash_calculator)
-        {
-            // Declare py::object->integer value casters.
-            DECLARE_VALUE_CASTER(bool);
-            DECLARE_INTEGER_VALUE_CASTER(int8_t, uint8_t);
-            DECLARE_INTEGER_VALUE_CASTER(int16_t, uint16_t);
-            DECLARE_INTEGER_VALUE_CASTER(int32_t, uint32_t);
-            DECLARE_INTEGER_VALUE_CASTER(int64_t, uint64_t);
+        // Declare py::object->integer value casters.
+        DECLARE_VALUE_CASTER(bool);
+        DECLARE_INTEGER_VALUE_CASTER(int8_t, uint8_t);
+        DECLARE_INTEGER_VALUE_CASTER(int16_t, uint16_t);
+        DECLARE_INTEGER_VALUE_CASTER(int32_t, uint32_t);
+        DECLARE_INTEGER_VALUE_CASTER(int64_t, uint64_t);
 
-            // Declare py::object->ki::BitInteger value casters.
-            DECLARE_BIT_INTEGER_VALUE_CASTER(1);
-            DECLARE_BIT_INTEGER_VALUE_CASTER(2);
-            DECLARE_BIT_INTEGER_VALUE_CASTER(3);
-            DECLARE_BIT_INTEGER_VALUE_CASTER(4);
-            DECLARE_BIT_INTEGER_VALUE_CASTER(5);
-            DECLARE_BIT_INTEGER_VALUE_CASTER(6);
-            DECLARE_BIT_INTEGER_VALUE_CASTER(7);
-            DECLARE_BIT_INTEGER_VALUE_CASTER(24);
+        // Declare py::object->ki::BitInteger value casters.
+        DECLARE_BIT_INTEGER_VALUE_CASTER(1);
+        DECLARE_BIT_INTEGER_VALUE_CASTER(2);
+        DECLARE_BIT_INTEGER_VALUE_CASTER(3);
+        DECLARE_BIT_INTEGER_VALUE_CASTER(4);
+        DECLARE_BIT_INTEGER_VALUE_CASTER(5);
+        DECLARE_BIT_INTEGER_VALUE_CASTER(6);
+        DECLARE_BIT_INTEGER_VALUE_CASTER(7);
+        DECLARE_BIT_INTEGER_VALUE_CASTER(24);
 
-            // Declare py::object->floating point value casters.
-            DECLARE_VALUE_CASTER(float);
-            DECLARE_VALUE_CASTER(double);
+        // Declare py::object->floating point value casters.
+        DECLARE_VALUE_CASTER(float);
+        DECLARE_VALUE_CASTER(double);
 
-            // Declare py::object->string value casters.
-            DECLARE_VALUE_CASTER(std::string);
-            DECLARE_VALUE_CASTER(std::u16string);
+        // Declare py::object->string value casters.
+        DECLARE_VALUE_CASTER(std::string);
+        DECLARE_VALUE_CASTER(std::u16string);
 
-            // Declare py::object->PropertyClass value caster.
-            DECLARE_VALUE_CASTER(PropertyClass);
+        // Declare py::object->PropertyClass value caster.
+        DECLARE_VALUE_CASTER(PropertyClass);
 
-            // Declare py::object->nlohmann::json value caster.
-            DECLARE_VALUE_CASTER(nlohmann::json);
-        }
+        // Declare py::object->nlohmann::json value caster.
+        DECLARE_VALUE_CASTER(nlohmann::json);
+    }
 
-        void define_class(const std::string &name, const py::object &cls, const Type *base_class)
-        {
-            define_type(std::unique_ptr<Type>(new PyClassType(name, cls, base_class, *this)));
-        }
-
-        py::object instantiate(const std::string &name)
-        {
-            // Instantiate the PropertyClass, and cast it to its Python representation.
-            const auto &type = get_type(name);
-            py::object instance = py::cast(type.instantiate().release());
-
-            // This object was just instantiated, and as such now has a
-            // reference count >= 2; decrement the reference count to avoid
-            // memory leaks.
-            instance.dec_ref();
-
-            return instance;
-        }
-
-        py::object instantiate(hash_t hash)
-        {
-            // Instantiate the PropertyClass, and cast it to its Python representation.
-            const auto &type = get_type(hash);
-            py::object instance = py::cast(type.instantiate().release());
-
-            // This object was just instantiated, and as such now has a
-            // reference count >= 2; decrement the reference count to avoid
-            // memory leaks.
-            instance.dec_ref();
-
-            return instance;
-        }
-    };
+    void PyTypeSystem::define_class(const std::string &name, const py::object &cls, const Type *base_class)
+    {
+        define_type(
+            std::unique_ptr<Type>(
+                new PyClassType(name, cls, base_class, *this)
+            )
+        );
+    }
 
     /**
     * A Python-based StaticProperty.
@@ -662,6 +640,9 @@ namespace
         
         void set_element_count(const std::size_t size) override
         {
+            if (size < 0)
+                throw std::runtime_error("Invalid element count given to VectorProperty.");
+
             // Empty the list.
             m_list = py::list();
 
@@ -736,6 +717,40 @@ namespace
     private:
         bool m_is_pointer;
         py::list m_list;
+    };
+
+    /**
+    * An extension on PyVectorProperty, which attempts to enforce a
+    * fixed size array.
+    */
+    class PyArrayProperty : public PyVectorProperty
+    {
+    public:
+        PyArrayProperty(PropertyClass &object, const std::string &name,
+            const Type &type, std::size_t size, bool is_pointer = false)
+            : PyVectorProperty(object, name, type, is_pointer)
+        {
+            set_element_count(size);
+        }
+
+        void set_element_count(const std::size_t size) override
+        {
+            if (size <= 0)
+                throw std::runtime_error("Invalid element count given to ArrayProperty.");
+            PyVectorProperty::set_element_count(size);
+        }
+
+        void set(const py::list &value)
+        {
+            if (value.size() != get_element_count())
+            {
+                std::ostringstream oss;
+                oss << "Value of ArrayProperty '" << get_name() <<
+                    "' must be of length " << get_element_count() << ".";
+                throw std::runtime_error(oss.str());
+            }
+            PyVectorProperty::set(value);
+        }
     };
 
     /**
@@ -837,6 +852,31 @@ namespace
     };
 
     /**
+    * TODO: Documentation.
+    */
+    class ArrayPropertyDef : public PropertyDef
+    {
+    public:
+        ArrayPropertyDef(
+            const std::string &name, const std::string &type_name,
+            std::size_t size, bool is_pointer = false
+        ) : PropertyDef(name, type_name, is_pointer)
+        {
+            m_size = size;
+        }
+
+        void instantiate(PropertyClass &object) const override
+        {
+            const auto &type_system = object.get_type().get_type_system();
+            const auto &type = type_system.get_type(get_type_name());
+            new PyArrayProperty(object, get_name(), type, m_size, is_pointer());
+        }
+
+    private:
+        std::size_t m_size;
+    };
+
+    /**
     * A Python alias class for PropertyDef.
     */
     class PyPropertyDef : public PropertyDef
@@ -868,11 +908,11 @@ void bind_pclass(py::module &m)
         .value("ENUM", Type::Kind::ENUM);
 
     py::class_<Type> type_cls(m, "Type");
-    py::class_<TypeSystem> _type_system_cls(m, "_TypeSystem");
-    py::class_<PyTypeSystem, TypeSystem> type_system_cls(m, "TypeSystem");
+    py::class_<TypeSystem, PyTypeSystem> type_system_cls(m, "TypeSystem");
     py::class_<PropertyDef, PyPropertyDef> property_def_cls(m, "PropertyDef");
     py::class_<StaticPropertyDef, PropertyDef> static_property_def_cls(m, "StaticProperty");
     py::class_<VectorPropertyDef, PropertyDef> vector_property_def_cls(m, "VectorProperty");
+    py::class_<ArrayPropertyDef, PropertyDef> array_property_def_cls(m, "ArrayProperty");
     py::class_<PropertyClass> property_class_cls(m, "PropertyClass", py::metaclass((PyObject *)&PyType_Type));
 
     // Type Definitions
@@ -884,46 +924,61 @@ void bind_pclass(py::module &m)
     type_cls.def_property_readonly("type_system", &Type::get_type_system);
 
     // _TypeSystem Definitions
-    _type_system_cls.def("__init__", [](TypeSystem &self, IHashCalculator *hash_calculator)
-    {
-        new (&self) TypeSystem { std::unique_ptr<IHashCalculator>(hash_calculator) };
-    });
-    _type_system_cls.def_property_readonly("hash_calculator",
-        &TypeSystem::get_hash_calculator, py::return_value_policy::reference);
-    _type_system_cls.def("has_type",
-        static_cast<bool (TypeSystem::*)(const std::string &) const>(&TypeSystem::has_type), "name"_a);
-    _type_system_cls.def("__contains__",
-        static_cast<bool (TypeSystem::*)(const std::string &) const>(&TypeSystem::has_type));
-    _type_system_cls.def("has_type",
-        static_cast<bool (TypeSystem::*)(hash_t) const>(&TypeSystem::has_type), "hash"_a);
-    _type_system_cls.def("__contains__",
-        static_cast<bool (TypeSystem::*)(hash_t) const>(&TypeSystem::has_type));
-    _type_system_cls.def("get_type",
-        static_cast<const Type &(TypeSystem::*)(const std::string &) const>(&TypeSystem::get_type),
-        py::return_value_policy::reference_internal, "name"_a);
-    _type_system_cls.def("__getitem__",
-        static_cast<const Type &(TypeSystem::*)(const std::string &) const>(&TypeSystem::get_type),
-        py::return_value_policy::reference_internal);
-    _type_system_cls.def("get_type",
-        static_cast<const Type &(TypeSystem::*)(hash_t) const>(&TypeSystem::get_type),
-        "hash"_a, py::return_value_policy::reference_internal);
-    _type_system_cls.def("__getitem__",
-        static_cast<const Type &(TypeSystem::*)(hash_t) const>(&TypeSystem::get_type),
-        py::return_value_policy::reference_internal);
-
-    // TypeSystem Definitions
     type_system_cls.def("__init__", [](PyTypeSystem &self, IHashCalculator *hash_calculator)
     {
         new (&self) PyTypeSystem { std::unique_ptr<IHashCalculator>(hash_calculator) };
     });
-    type_system_cls.def("define_class", &PyTypeSystem::define_class,
-        "name"_a, "cls"_a, "base_class"_a);
-    type_system_cls.def("instantiate",
-        static_cast<py::object (PyTypeSystem::*)(const std::string &)>(&PyTypeSystem::instantiate),
-        py::return_value_policy::take_ownership, "name"_a);
-    type_system_cls.def("instantiate",
-        static_cast<py::object (PyTypeSystem::*)(hash_t)>(&PyTypeSystem::instantiate),
-        py::return_value_policy::take_ownership, "hash"_a);
+    type_system_cls.def_property_readonly("hash_calculator", &TypeSystem::get_hash_calculator);
+    type_system_cls.def("has_type",
+        static_cast<bool (TypeSystem::*)(const std::string &) const>(&TypeSystem::has_type), "name"_a);
+    type_system_cls.def("__contains__",
+        static_cast<bool (TypeSystem::*)(const std::string &) const>(&TypeSystem::has_type));
+    type_system_cls.def("has_type",
+        static_cast<bool (TypeSystem::*)(hash_t) const>(&TypeSystem::has_type), "hash"_a);
+    type_system_cls.def("__contains__",
+        static_cast<bool (TypeSystem::*)(hash_t) const>(&TypeSystem::has_type));
+    type_system_cls.def("get_type",
+        static_cast<const Type &(TypeSystem::*)(const std::string &) const>(&TypeSystem::get_type),
+        py::return_value_policy::reference_internal, "name"_a);
+    type_system_cls.def("__getitem__",
+        static_cast<const Type &(TypeSystem::*)(const std::string &) const>(&TypeSystem::get_type),
+        py::return_value_policy::reference_internal);
+    type_system_cls.def("get_type",
+        static_cast<const Type &(TypeSystem::*)(hash_t) const>(&TypeSystem::get_type),
+        "hash"_a, py::return_value_policy::reference_internal);
+    type_system_cls.def("__getitem__",
+        static_cast<const Type &(TypeSystem::*)(hash_t) const>(&TypeSystem::get_type),
+        py::return_value_policy::reference_internal);
+    type_system_cls.def("define_class", [](PyTypeSystem &self, const std::string &name, const py::object &cls, const Type *base_class)
+    {
+        return self.define_class(name, cls, base_class);
+    }, "name"_a, "cls"_a, "base_class"_a);
+    type_system_cls.def("instantiate", [](PyTypeSystem &self, const std::string &name)
+    {
+        // Instantiate the PropertyClass, and cast it to its Python representation.
+        const auto &type = self.get_type(name);
+        py::object instance = py::cast(type.instantiate().release());
+
+        // This object was just instantiated, and as such now has a
+        // reference count >= 2; decrement the reference count to avoid
+        // memory leaks.
+        instance.dec_ref();
+
+        return instance;
+    }, py::return_value_policy::take_ownership, "name"_a);
+    type_system_cls.def("instantiate", [](PyTypeSystem &self, hash_t hash)
+    {
+        // Instantiate the PropertyClass, and cast it to its Python representation.
+        const auto &type = self.get_type(hash);
+        py::object instance = py::cast(type.instantiate().release());
+
+        // This object was just instantiated, and as such now has a
+        // reference count >= 2; decrement the reference count to avoid
+        // memory leaks.
+        instance.dec_ref();
+
+        return instance;
+    }, py::return_value_policy::take_ownership, "hash"_a);
 
     // PropertyDef Definitions
     property_def_cls.def(py::init<const std::string &, const std::string &, bool>(),
@@ -1005,6 +1060,45 @@ void bind_pclass(py::module &m)
             // Cast the property to a PyVectorProperty.
             auto &vector_prop = dynamic_cast<PyVectorProperty &>(prop);
             vector_prop.set(value);
+        }
+    });
+
+    // ArrayPropertyDef Definitions
+    array_property_def_cls.def(py::init<const std::string &, const std::string &, std::size_t, bool>(),
+        "name"_a, "type_name"_a, "size"_a,  "is_pointer"_a = false);
+    array_property_def_cls.def("__get__", [](const ArrayPropertyDef &self, const py::object &instance, const py::object &owner)
+    {
+        // Are we attempting to read the value of this property from a
+        // PropertyClass instance?
+        if (py::isinstance<PropertyClass>(instance))
+        {
+            // Yep. Read the value of the property.
+            const auto *object = instance.cast<const PropertyClass *>();
+            const auto &properties = object->get_properties();
+            const auto &prop = properties.get_property(self.get_name());
+
+            // Cast the property to a PyArrayProperty.
+            const auto &array_prop = dynamic_cast<const PyArrayProperty &>(prop);
+            return py::object(array_prop.get());
+        }
+
+        // Nope. Simply return this PropertyDef instance.
+        return py::cast(self);
+    }, py::return_value_policy::reference_internal);
+    array_property_def_cls.def("__set__", [](const ArrayPropertyDef &self, py::object &instance, py::object &value)
+    {
+        // Are we attempting to set the value of this property on a
+        // PropertyClass instance?
+        if (py::isinstance<PropertyClass>(instance))
+        {
+            // Yep. Set the value of the property.
+            auto *object = instance.cast<PropertyClass *>();
+            PropertyList &properties = object->get_properties();
+            IProperty &prop = properties.get_property(self.get_name());
+
+            // Cast the property to a PyArrayProperty.
+            auto &array_prop = dynamic_cast<PyArrayProperty &>(prop);
+            array_prop.set(value);
         }
     });
 

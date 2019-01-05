@@ -2,11 +2,11 @@ from . import lib
 
 # Lift symbols from .lib.pclass...
 from .lib.pclass import IHashCalculator, WizardHashCalculator, TypeSystem, \
-    StaticProperty, VectorProperty
+    StaticProperty, VectorProperty, ArrayProperty
 
 __all__ = [
     'IHashCalculator', 'WizardHashCalculator', 'TypeSystem', 'StaticProperty',
-    'VectorProperty', 'PropertyClassMeta', 'PropertyClass'
+    'VectorProperty', 'ArrayProperty', 'PropertyClassMeta', 'PropertyClass'
 ]
 
 
