@@ -1,7 +1,7 @@
 import pytest
 
 from ki.pclass import WizardHashCalculator, TypeSystem, PropertyClassMeta, \
-    PropertyClass, StaticProperty, VectorProperty
+    PropertyClass, StaticProperty, VectorProperty, ArrayProperty
 from ki.serialization import BinarySerializerFlags, BinarySerializer
 from ki.util import BitBuffer, BitStream
 
@@ -27,6 +27,14 @@ TEST_OBJECT_VALUES = {
 
     'm_float32': 3.1415927410125732421875,
     'm_float64': 3.141592653589793115997963468544185161590576171875,
+
+    'm_int_ptr': 52,
+
+    'm_int_array': [*range(5)],
+    'm_int_ptr_array': [*range(5)],
+
+    'm_int_vector': [*range(100)],
+    'm_int_ptr_vector': [*range(100)]
 }
 
 SAMPLE_FILE_DIR = 'tests/samples/serialization/'
@@ -72,6 +80,14 @@ def type_system(hash_calculator):
         float32 = StaticProperty('m_float32', 'float')
         float64 = StaticProperty('m_float64', 'double')
 
+        int_ptr = StaticProperty('m_int_ptr', 'int', is_pointer=True)
+
+        int_array = ArrayProperty('m_int_array', 'int', 5)
+        int_ptr_array = ArrayProperty('m_int_ptr_array', 'int', 5, is_pointer=True)
+
+        int_vector = VectorProperty('m_int_vector', 'int')
+        int_ptr_vector = VectorProperty('m_int_ptr_vector', 'int', is_pointer=True)
+
     return instance
 
 
@@ -99,29 +115,45 @@ def test_object(type_system):
     instance.float32 = TEST_OBJECT_VALUES['m_float32']
     instance.float64 = TEST_OBJECT_VALUES['m_float64']
 
+    instance.int_ptr = TEST_OBJECT_VALUES['m_int_ptr']
+
+    instance.int_array = TEST_OBJECT_VALUES['m_int_array']
+    instance.int_ptr_array = TEST_OBJECT_VALUES['m_int_ptr_array']
+
+    instance.int_vector = TEST_OBJECT_VALUES['m_int_vector']
+    instance.int_ptr_vector = TEST_OBJECT_VALUES['m_int_ptr_vector']
+
     return instance
 
 
-def _validate_test_object(test_object):
-    assert test_object.int4 == TEST_OBJECT_VALUES['m_int4']
-    assert test_object.int8 == TEST_OBJECT_VALUES['m_int8']
-    assert test_object.int16 == TEST_OBJECT_VALUES['m_int16']
-    assert test_object.int24 == TEST_OBJECT_VALUES['m_int24']
-    assert test_object.int32 == TEST_OBJECT_VALUES['m_int32']
-    assert test_object.int64 == TEST_OBJECT_VALUES['m_int64']
+def _validate_test_object(instance):
+    assert instance.int4 == TEST_OBJECT_VALUES['m_int4']
+    assert instance.int8 == TEST_OBJECT_VALUES['m_int8']
+    assert instance.int16 == TEST_OBJECT_VALUES['m_int16']
+    assert instance.int24 == TEST_OBJECT_VALUES['m_int24']
+    assert instance.int32 == TEST_OBJECT_VALUES['m_int32']
+    assert instance.int64 == TEST_OBJECT_VALUES['m_int64']
 
-    assert test_object.uint4 == TEST_OBJECT_VALUES['m_uint4']
-    assert test_object.uint8 == TEST_OBJECT_VALUES['m_uint8']
-    assert test_object.uint16 == TEST_OBJECT_VALUES['m_uint16']
-    assert test_object.uint24 == TEST_OBJECT_VALUES['m_uint24']
-    assert test_object.uint32 == TEST_OBJECT_VALUES['m_uint32']
-    assert test_object.uint64 == TEST_OBJECT_VALUES['m_uint64']
+    assert instance.uint4 == TEST_OBJECT_VALUES['m_uint4']
+    assert instance.uint8 == TEST_OBJECT_VALUES['m_uint8']
+    assert instance.uint16 == TEST_OBJECT_VALUES['m_uint16']
+    assert instance.uint24 == TEST_OBJECT_VALUES['m_uint24']
+    assert instance.uint32 == TEST_OBJECT_VALUES['m_uint32']
+    assert instance.uint64 == TEST_OBJECT_VALUES['m_uint64']
 
-    assert test_object.string == TEST_OBJECT_VALUES['m_string']
-    assert test_object.wstring == TEST_OBJECT_VALUES['m_wstring']
+    assert instance.string == TEST_OBJECT_VALUES['m_string']
+    assert instance.wstring == TEST_OBJECT_VALUES['m_wstring']
 
-    assert test_object.float32 == TEST_OBJECT_VALUES['m_float32']
-    assert test_object.float64 == TEST_OBJECT_VALUES['m_float64']
+    assert instance.float32 == TEST_OBJECT_VALUES['m_float32']
+    assert instance.float64 == TEST_OBJECT_VALUES['m_float64']
+
+    assert instance.int_ptr == TEST_OBJECT_VALUES['m_int_ptr']
+
+    assert instance.int_array == TEST_OBJECT_VALUES['m_int_array']
+    assert instance.int_ptr_array == TEST_OBJECT_VALUES['m_int_ptr_array']
+
+    assert instance.int_vector == TEST_OBJECT_VALUES['m_int_vector']
+    assert instance.int_ptr_vector == TEST_OBJECT_VALUES['m_int_ptr_vector']
 
 
 @pytest.mark.parametrize("sample_filename", BINARY_SAMPLES.keys())
