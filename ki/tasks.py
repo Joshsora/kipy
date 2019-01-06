@@ -5,8 +5,8 @@ from enum import Enum, auto
 
 class TaskSignal(Enum):
     DONE = auto()
-    AGAIN = auto()
-    CONT = auto()
+    CONTINUE = auto()
+    CONTINUE_DELAYED = auto()
 
 
 class Task(object):
@@ -55,6 +55,9 @@ class Task(object):
             asyncio_task.cancel()
 
     async def _tick(self, delay=None, args=None):
+        if args is None:
+            args = ()
+
         try:
             # Wait out the delay before our first tick.
             if delay is not None:
@@ -62,24 +65,27 @@ class Task(object):
 
             while self.running:
                 # Invoke our tick behavior.
-                if args is not None:
-                    signal = self._tick_func(self._participant(), *args)
-                else:
-                    signal = self._tick_func(self._participant())
+                signal = self._tick_func(self._participant(), *args)
 
-                if signal == TaskSignal.DONE:
-                    # End the task.
-                    break
-                elif signal == TaskSignal.AGAIN:
-                    # Wait out the delay before our next tick.
+                if signal == TaskSignal.CONTINUE:
+                    # Continue to the next execution frame.
+                    continue
+                elif signal == TaskSignal.CONTINUE_DELAYED:
+                    # Wait out the delay before our next execution.
                     if delay is not None:
                         await asyncio.sleep(delay)
+                else:
+                    # Assume they'd like to end the task.
+                    break
         except asyncio.CancelledError:
             pass
         finally:
             # Invoke our cleanup behavior.
             if self._cleanup_func is not None:
                 self._cleanup_func(self._participant())
+
+            # Invoke our internal cleanup behavior (if it hasn't already been).
+            self.stop()
 
 
 class TaskDecorator(object):
