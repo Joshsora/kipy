@@ -80,7 +80,7 @@ setup(
     author=about['__author__'],
     description=about['__description__'],
     long_description=long_description,
-    packages=['ki'],
+    packages=['ki', 'ki.protocol'],
     ext_modules=[CMakeExtension('ki/lib')],
     cmdclass={'build_ext': CMakeBuild},
     zip_safe=False,

@@ -44,7 +44,7 @@ class SessionBase(TaskParticipant):
         """
         if not self.alive:
             self.on_timeout()
-        return TaskSignal.AGAIN
+        return TaskSignal.CONTINUE_DELAYED
 
     def on_invalid_packet(self):
         """"Overrides `ki.protocol.net.Session.on_invalid_packet()`."""
@@ -115,7 +115,7 @@ class ServerSessionBase(SessionBase):
     def _keep_alive(self):
         """Sends a keep alive packet periodically."""
         self.send_keep_alive(self.server.startup_time_delta)
-        return TaskSignal.AGAIN
+        return TaskSignal.CONTINUE_DELAYED
 
     def on_established(self):
         """"Overrides `ki.protocol.net.ServerSession.on_established()`."""
@@ -146,7 +146,7 @@ class ClientSessionBase(SessionBase):
     def _keep_alive(self):
         """Sends a keep alive packet periodically."""
         self.send_keep_alive()
-        return TaskSignal.AGAIN
+        return TaskSignal.CONTINUE_DELAYED
 
     def on_established(self):
         """"Overrides `ki.protocol.net.ClientSession.on_established()`."""
