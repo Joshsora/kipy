@@ -2,6 +2,7 @@ import logging
 import weakref
 
 from .lib.protocol.dml import MessageManager
+from .tasks import TaskParticipant
 
 
 class MessageHandler(object):
@@ -46,7 +47,7 @@ class MessageHandlerDecorator(object):
 msghandler = MessageHandlerDecorator  # Alias
 
 
-class Service(object):
+class Service(TaskParticipant):
     """The base for any class that wishes to house a message handler."""
     logger = logging.getLogger('SERVICE')
 
