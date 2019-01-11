@@ -2,7 +2,8 @@ import pytest
 
 from ki.pclass import WizardHashCalculator, TypeSystem, PropertyClassMeta, \
     PropertyClass, EnumMeta, Enum, StaticProperty, VectorProperty
-from ki.serialization import BinarySerializerFlags, BinarySerializer
+from ki.serialization import BinarySerializerFlags, BinarySerializer, \
+    JsonSerializer
 from ki.util import BitBuffer, BitStream
 
 SAMPLE_DIR = 'tests/samples/serialization/'
@@ -12,7 +13,10 @@ BINARY_TEST_PARAMS = (
     ('regular_compressed.bin', False, BinarySerializerFlags.COMPRESSED),
     ('file_compressed.bin', True, BinarySerializerFlags(9))
 )
-JSON_TEST_PARAMS = ()
+JSON_TEST_PARAMS = (
+    ('regular.json', False),
+    ('file.json', True),
+)
 
 
 @pytest.fixture(scope='module')
@@ -226,11 +230,29 @@ def test_binary_deserialization(sample_filename, is_file, flags, type_system):
     test_object.validate_test_values()
 
 
-@pytest.mark.parametrize("sample_filename,is_file,flags", JSON_TEST_PARAMS)
-def test_json_serialization(sample_filename, is_file, flags, type_system, test_object):
-    raise NotImplementedError
+@pytest.mark.parametrize("sample_filename,is_file", JSON_TEST_PARAMS)
+def test_json_serialization(sample_filename, is_file, type_system, test_object):
+    serializer = JsonSerializer(type_system, is_file)
+
+    with open(SAMPLE_DIR + sample_filename, 'r') as f:
+        sample_data = f.read()
+
+    # Serialize the object.
+    data = serializer.save(test_object)
+
+    # Validate the data.
+    assert data == sample_data
 
 
-@pytest.mark.parametrize("sample_filename,is_file,flags", JSON_TEST_PARAMS)
-def test_json_deserialization(sample_filename, is_file, flags, type_system):
-    raise NotImplementedError
+@pytest.mark.parametrize("sample_filename,is_file", JSON_TEST_PARAMS)
+def test_json_deserialization(sample_filename, is_file, type_system):
+    serializer = JsonSerializer(type_system, is_file)
+
+    with open(SAMPLE_DIR + sample_filename, 'r') as f:
+        sample_data = f.read()
+
+    # Deserialize the data.
+    test_object = serializer.load(sample_data)
+
+    # Validate the object.
+    test_object.validate_test_values()
