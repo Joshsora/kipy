@@ -362,17 +362,21 @@ namespace detail
             auto *value_ptr = value.ptr();
             if (PyBool_Check(value_ptr))
                 return static_cast<bool>(PyObject_IsTrue(value_ptr));
-            else if (PyLong_Check(value_ptr))
-                return PyLong_AsLong(value_ptr);
             else if (PyFloat_Check(value_ptr))
                 return PyFloat_AsDouble(value_ptr);
+            else if (PyLong_Check(value_ptr) ||
+                     PyObject_HasAttrString(value_ptr, "__int__"))
+            {
+                int overflow = 0;
+                auto long_value = PyLong_AsLongLongAndOverflow(value_ptr, &overflow);
+                if (overflow)
+                    long_value = PyLong_AsUnsignedLongLong(value_ptr);
+                return long_value;
+            }
             else if (PyBytes_Check(value_ptr))
                 return PyBytes_AsString(value_ptr);
             else if (PyUnicode_Check(value_ptr))
                 return PyUnicode_AsUTF8(value_ptr);
-            else if (!PyType_Check(value_ptr) &&
-                PyObject_HasAttrString(value_ptr, "__int__"))
-                return value.attr("__int__")().cast<long>();
             else
                 return this->bad_cast();
         }
@@ -389,7 +393,7 @@ namespace detail
         py::object cast_value(const nlohmann::json &value) const override
         {
             if (value.is_null())
-                return py::cast(nullptr);
+                return py::none();
             else if (value.is_boolean())
                 return py::cast(value.get<bool>());
             else if (value.is_number_integer())
@@ -607,6 +611,16 @@ namespace
             if (index < 0 || index >= get_element_count())
                 throw std::runtime_error("Index out of bounds.");
             m_value = value.as<py::object>().get<py::object>();
+
+            // Is this an enum?
+            if (get_type().get_kind() == Type::Kind::ENUM)
+            {
+                // Are we trying to set the value using an integer?
+                if (pybind11::int_(m_value, true).check())
+                {
+                    m_value = py::cast(Enum(get_type(), m_value.cast<unsigned int>()));
+                }
+            }
         }
 
         const PropertyClass *get_object(const std::size_t index) const override
