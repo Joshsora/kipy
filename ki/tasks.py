@@ -84,8 +84,9 @@ class Task(object):
             if self._cleanup_func is not None:
                 self._cleanup_func(self._participant())
 
-            # Invoke our internal cleanup behavior (if it hasn't already been).
-            self.stop()
+            # Delete the underlying `asyncio.Task` object.
+            if self.running:
+                del Task.running_tasks[self.name]
 
 
 class TaskDecorator(object):

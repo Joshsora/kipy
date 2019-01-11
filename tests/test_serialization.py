@@ -1,7 +1,7 @@
 import pytest
 
 from ki.pclass import WizardHashCalculator, TypeSystem, PropertyClassMeta, \
-    PropertyClass, StaticProperty, VectorProperty, ArrayProperty
+    PropertyClass, EnumMeta, Enum, StaticProperty, VectorProperty
 from ki.serialization import BinarySerializerFlags, BinarySerializer
 from ki.util import BitBuffer, BitStream
 
@@ -24,8 +24,48 @@ def hash_calculator():
 def type_system(hash_calculator):
     instance = TypeSystem(hash_calculator)
     PropertyClassMeta.type_system = instance
+    EnumMeta.type_system = instance
 
-    class TestObject(PropertyClass):
+
+    class TestablePropertyClass(PropertyClass):
+        _TEST_VALUES = {}
+
+        def apply_test_values(self):
+            for key, value in self._TEST_VALUES.items():
+                setattr(self, key, value)
+
+        def validate_test_values(self):
+            for key, value in self._TEST_VALUES.items():
+                assert getattr(self, key) == value
+
+
+    class NestedObjectKind(Enum):
+        NONE = 0
+        OBJECT = 1
+        OBJECT_A = 2
+        OBJECT_B = 3
+
+
+    class NestedTestObject(TestablePropertyClass):
+        kind = StaticProperty('m_kind', 'enum NestedObjectKind')
+
+        _TEST_VALUES = {'kind': NestedObjectKind.OBJECT}
+
+
+    class NestedTestObjectA(NestedTestObject):
+        extra_value = StaticProperty('m_extra_value', 'int')
+
+        _TEST_VALUES = {
+            'kind': NestedObjectKind.OBJECT_A,
+            'extra_value': 10
+        }
+
+
+    class NestedTestObjectB(NestedTestObject):
+        _TEST_VALUES = {'kind': NestedObjectKind.OBJECT_B}
+
+
+    class TestObject(TestablePropertyClass):
         int4 = StaticProperty('m_int4', 'bi4')
         int8 = StaticProperty('m_int8', 'char')
         int16 = StaticProperty('m_int16', 'short')
@@ -48,11 +88,22 @@ def type_system(hash_calculator):
 
         int_ptr = StaticProperty('m_int_ptr', 'int', is_pointer=True)
 
-        int_array = ArrayProperty('m_int_array', 'int', 5)
-        int_ptr_array = ArrayProperty('m_int_ptr_array', 'int', 5, is_pointer=True)
+        int_array = VectorProperty('m_int_array', 'int')
+        int_ptr_array = VectorProperty('m_int_ptr_array', 'int', is_pointer=True)
 
         int_vector = VectorProperty('m_int_vector', 'int')
         int_ptr_vector = VectorProperty('m_int_ptr_vector', 'int', is_pointer=True)
+
+        object = StaticProperty('m_object', 'class NestedTestObjectA')
+        object_ptr = StaticProperty('m_object_ptr', 'class NestedTestObject',
+                                    is_pointer=True)
+        null_object_ptr = StaticProperty('m_null_object_ptr', 'class NestedTestObject',
+                                         is_pointer=True)
+
+        object_vector = VectorProperty('m_object_vector', 'class NestedTestObject',
+                                       is_pointer=True)
+        object_ptr_vector = VectorProperty('m_object_ptr_vector', 'class NestedTestObject',
+                                           is_pointer=True)
 
         _TEST_VALUES = {
             'int4': -6,
@@ -82,16 +133,51 @@ def type_system(hash_calculator):
             'int_ptr_array': [*range(5)],
 
             'int_vector': [*range(100)],
-            'int_ptr_vector': [*range(100)]
+            'int_ptr_vector': [*range(100)],
+
+            'null_object_ptr': None
         }
 
         def apply_test_values(self):
-            for key, value in self._TEST_VALUES.items():
-                setattr(self, key, value)
+            super().apply_test_values()
+
+            object = instance.instantiate('class NestedTestObject')
+            object.apply_test_values()
+            object_a = instance.instantiate('class NestedTestObjectA')
+            object_a.apply_test_values()
+            object_b = instance.instantiate('class NestedTestObjectB')
+            object_b.apply_test_values()
+
+            self.object = object_a
+            self.object_ptr = object_a
+
+            self.object_vector = [object, object_a, object_b]
+            self.object_ptr_vector = [object, object_a, object_b]
 
         def validate_test_values(self):
-            for key, value in self._TEST_VALUES.items():
-                assert getattr(self, key) == value
+            super().validate_test_values()
+
+            assert isinstance(self.object, NestedTestObjectA)
+            self.object.validate_test_values()
+
+            assert isinstance(self.object_ptr, NestedTestObjectA)
+            self.object_ptr.validate_test_values()
+
+            assert len(self.object_vector) == 3
+            assert isinstance(self.object_vector[0], NestedTestObject)
+            assert isinstance(self.object_vector[1], NestedTestObjectA)
+            assert isinstance(self.object_vector[2], NestedTestObjectB)
+
+            for object in self.object_vector:
+                object.validate_test_values()
+
+            assert len(self.object_ptr_vector) == 3
+            assert isinstance(self.object_ptr_vector[0], NestedTestObject)
+            assert isinstance(self.object_ptr_vector[1], NestedTestObjectA)
+            assert isinstance(self.object_ptr_vector[2], NestedTestObjectB)
+
+            for object_ptr in self.object_ptr_vector:
+                object_ptr.validate_test_values()
 
     return instance
 
