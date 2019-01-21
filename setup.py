@@ -5,7 +5,7 @@ import subprocess
 import sys
 from distutils.version import LooseVersion
 
-from setuptools import setup, find_packages, Extension
+from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 
 

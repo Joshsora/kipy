@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import weakref
 
@@ -93,4 +94,6 @@ class ServiceParticipant(object):
                                 sender, message.handler)
             return
 
-        message_handler(sender, message)
+        asyncio.ensure_future(
+            message_handler(sender, message)
+        )
