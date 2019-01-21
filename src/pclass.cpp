@@ -329,6 +329,27 @@ namespace detail
     };
 
     /**
+    * value_caster specialization for casting std::string to a
+    * py::object.
+    */
+    template <>
+    struct value_caster<std::string, py::object>
+        : value_caster_impl<std::string, py::object>
+    {
+        py::object cast_value(const std::string &value) const override
+        {
+            try
+            {
+                return py::cast(value);
+            }
+            catch (py::cast_error &e)
+            {
+                return this->bad_cast();
+            }
+        }
+    };
+
+    /**
     * value_caster specialization for casting py::object to an
     * std::u16string.
     */
@@ -616,7 +637,7 @@ namespace
             if (get_type().get_kind() == Type::Kind::ENUM)
             {
                 // Are we trying to set the value using an integer?
-                if (pybind11::int_(m_value, true).check())
+                if (py::object(m_value, true).check())
                 {
                     m_value = py::cast(Enum(get_type(), m_value.cast<unsigned int>()));
                 }
@@ -956,7 +977,8 @@ void bind_pclass(py::module &m)
     // TypeSystem Definitions
     type_system_cls.def("__init__", [](PyTypeSystem &self, IHashCalculator *hash_calculator)
     {
-        new (&self) PyTypeSystem(std::unique_ptr<IHashCalculator>(hash_calculator));
+        std::unique_ptr<IHashCalculator> hash_calculator_ptr = std::unique_ptr<IHashCalculator>(hash_calculator);
+        new (&self) PyTypeSystem(hash_calculator_ptr);
     });
     type_system_cls.def_property_readonly("hash_calculator", &TypeSystem::get_hash_calculator);
     type_system_cls.def("has_type",

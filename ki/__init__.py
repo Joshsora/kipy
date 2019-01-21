@@ -1,6 +1,4 @@
-from . import config
 from . import dml
-from . import errors
 from . import lib
 from . import net
 from . import pclass
