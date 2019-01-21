@@ -1,8 +1,0 @@
-group-a:
-    var-1: 1
-    var-2: 2
-    var-3: 3
-    group-b:
-        var-1: 1
-        var-2: 2
-        var-3: 3
