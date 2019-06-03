@@ -512,20 +512,20 @@ namespace
             );
         }
 
-        void write_to(BitStream &stream, Value &value) const override
+        void write_to(BitStream &stream, const bool is_file, Value &value) const override
         {
             const auto *object = value.get<py::object>().cast<PropertyClass *>();
             const auto &properties = object->get_properties();
             for (auto it = properties.begin(); it != properties.end(); ++it)
-                it->write_value_to(stream);
+                it->write_value_to(stream, is_file);
         }
 
-        Value read_from(BitStream &stream) const override
+        Value read_from(BitStream &stream, const bool is_file) const override
         {
             auto object = instantiate();
             auto &properties = object->get_properties();
             for (auto it = properties.begin(); it != properties.end(); ++it)
-                it->read_value_from(stream);
+                it->read_value_from(stream, is_file);
             return Value::make_value<py::object>(py::cast(object.release()));
         }
 
@@ -637,7 +637,7 @@ namespace
             if (get_type().get_kind() == Type::Kind::ENUM)
             {
                 // Are we trying to set the value using an integer?
-                if (py::object(m_value, true).check())
+                if (py::int_(m_value, true).check())
                 {
                     m_value = py::cast(Enum(get_type(), m_value.cast<unsigned int>()));
                 }
@@ -1055,5 +1055,10 @@ void bind_pclass(py::module &m)
     property_class_cls.def(py::init<const Type &, const TypeSystem &>(),
         py::keep_alive<1, 2>(), py::keep_alive<1, 3>(),
         "type"_a, "type_system"_a);
+    property_class_cls.def_property_readonly("_type", &PropertyClass::get_type);
+    property_class_cls.def_property_readonly("_type_system", [](const PropertyClass &self)
+    {
+        return &self.get_type().get_type_system();
+    });
     property_class_cls.def("on_created", &PropertyClass::on_created);
 }
