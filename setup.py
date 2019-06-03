@@ -71,7 +71,6 @@ with open('README.md', 'r', encoding='utf-8') as f:
     long_description = f.read()
 
 setup_requires = ['pytest-runner>=2.0,<3dev']
-install_requires = ['ruamel.yaml']
 tests_require = ['pytest>=3.0.0']
 
 setup(
@@ -85,6 +84,5 @@ setup(
     cmdclass={'build_ext': CMakeBuild},
     zip_safe=False,
     setup_requires=setup_requires,
-    install_requires=install_requires,
     tests_require=tests_require
 )
