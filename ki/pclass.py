@@ -1,12 +1,17 @@
+import copy
+
 from . import lib
 
-# Lift symbols from .lib.pclass...
+from .lib.serialization import BinarySerializer, BinarySerializerFlags
+from .lib.util import BitBuffer, BitStream
+
 from .lib.pclass import IHashCalculator, WizardHashCalculator, TypeSystem, \
     StaticProperty, VectorProperty
 
 __all__ = [
     'IHashCalculator', 'WizardHashCalculator', 'TypeSystem', 'StaticProperty',
-    'VectorProperty', 'PropertyClassMeta', 'PropertyClass'
+    'VectorProperty', 'PropertyClassMeta', 'PropertyClass', 'EnumMeta', 'Enum',
+    'EnumElement'
 ]
 
 
@@ -38,8 +43,11 @@ class PropertyClassMeta(type):
         # TODO: Add support for the base_class argument.
         mcs.type_system.define_class(cls.TYPE_NAME, cls, None)
 
-        return cls
+        # Pointer Aliases
+        mcs.type_system.define_class('%s*' % cls.TYPE_NAME, cls, None)
+        mcs.type_system.define_class('class SharedPointer<%s>' % cls.TYPE_NAME, cls, None)
 
+        return cls
 
 class PropertyClass(lib.pclass.PropertyClass, metaclass=PropertyClassMeta):
     TYPE_NAME = None
@@ -51,6 +59,25 @@ class PropertyClass(lib.pclass.PropertyClass, metaclass=PropertyClassMeta):
 
         for property_def in self._property_defs:
             property_def.instantiate(self)
+
+    def __deepcopy__(self, memodict={}):
+        # Instantiate a new copy.
+        instance = self._type_system.instantiate(self.TYPE_NAME)
+
+        # Assign its property values.
+        for name, attr in self.__class__.__dict__.items():
+            if isinstance(attr, (StaticProperty, VectorProperty)):
+                value = copy.deepcopy(getattr(self, name))
+                setattr(instance, name, value)
+
+        return instance
+
+    def serialize_binary(self, flags=BinarySerializerFlags.NONE):
+        buffer = BitBuffer()
+        stream = BitStream(buffer)
+        serializer = BinarySerializer(self._type_system, False, flags)
+        serializer.save(self, stream)
+        return buffer.data[:stream.tell().as_bytes()]
 
 
 class EnumMeta(type):
@@ -74,14 +101,20 @@ class EnumMeta(type):
         # Define a new EnumType.
         enum_type = mcs.type_system.define_enum(cls.TYPE_NAME)
 
-        # Convert our class attributes to `lib.pclass.Enum`.
-        for key, value in dct.items():
-            if isinstance(value, int):
-                enum_type.add_element(key, value)
-                setattr(cls, key, lib.pclass.Enum(enum_type, value))
+        # Convert our EnumElement attributes to `lib.pclass.Enum`.
+        for name, attr in dct.items():
+            if isinstance(attr, EnumElement):
+                enum_type.add_element(attr.name, attr.value)
+                setattr(cls, name, lib.pclass.Enum(enum_type, attr.value))
 
         return cls
 
 
 class Enum(metaclass=EnumMeta):
     TYPE_NAME = None
+
+
+class EnumElement(object):
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
