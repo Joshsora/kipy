@@ -50,10 +50,31 @@ void bind_serialization(py::module &m)
     py::class_<BinarySerializer, PyBinarySerializer> binary_serializer_cls(m, "BinarySerializer");
     py::class_<JsonSerializer> json_serializer_cls(m, "JsonSerializer");
 
-    py::enum_<BinarySerializer::flags>(m, "BinarySerializerFlags", py::arithmetic())
+    #define DEFINE_ENUM_OP(descr, op)                                                      \
+        .def(descr, [](BinarySerializer::flags &self, BinarySerializer::flags &other)      \
+        {                                                                                  \
+            return static_cast<BinarySerializer::flags>(                                   \
+                static_cast<uint32_t>(self) op static_cast<uint32_t>(other)                \
+            );                                                                             \
+        })
+
+    py::enum_<BinarySerializer::flags>(m, "BinarySerializerFlags")
         .value("NONE", BinarySerializer::flags::NONE)
         .value("WRITE_SERIALIZER_FLAGS", BinarySerializer::flags::WRITE_SERIALIZER_FLAGS)
-        .value("COMPRESSED", BinarySerializer::flags::COMPRESSED);
+        .value("WRITE_PUBLIC_ONLY", BinarySerializer::flags::WRITE_PUBLIC_ONLY)
+        .value("COMPRESSED", BinarySerializer::flags::COMPRESSED)
+        DEFINE_ENUM_OP("__or__", |)
+        DEFINE_ENUM_OP("__ror__", |)
+        DEFINE_ENUM_OP("__and__", &)
+        DEFINE_ENUM_OP("__rand__", &)
+        DEFINE_ENUM_OP("__xor__", ^)
+        DEFINE_ENUM_OP("__rxor__", ^)
+        .def("__invert__", [](BinarySerializer::flags &self)
+        {
+            return static_cast<BinarySerializer::flags>(
+                ~static_cast<uint32_t>(self)
+            );
+        });
 
     // BinarySerializer Definitions
     binary_serializer_cls.def(py::init<const TypeSystem &, bool, BinarySerializer::flags>(),
