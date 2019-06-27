@@ -589,8 +589,9 @@ namespace
     {
     public:
         PyStaticProperty(PropertyClass &object, const std::string &name,
-            const Type &type, bool is_pointer = false)
-            : IProperty(object, name, type)
+            const Type &type, const bool is_pointer = false,
+            IProperty::flags flags = IProperty::flags::NONE)
+            : IProperty(object, name, type, flags)
         {
             m_is_pointer = is_pointer;
         }
@@ -703,8 +704,9 @@ namespace
     {
     public:
         PyVectorProperty(PropertyClass &object, const std::string &name,
-            const Type &type, bool is_pointer = false)
-            : IProperty(object, name, type)
+            const Type &type, const bool is_pointer = false,
+            IProperty::flags flags = IProperty::flags::NONE)
+            : IProperty(object, name, type, flags)
         {
             m_is_pointer = is_pointer;
         }
@@ -839,11 +841,13 @@ namespace
     class PropertyDef
     {
     public:
-        PropertyDef(const std::string &name, const std::string &type_name, bool is_pointer = false)
+        PropertyDef(const std::string &name, const std::string &type_name,
+            const bool is_pointer = false, IProperty::flags flags = IProperty::flags::NONE)
         {
             m_name = name;
             m_type_name = type_name;
             m_is_pointer = is_pointer;
+            m_flags = flags;
         }
 
         std::string get_name() const
@@ -859,6 +863,11 @@ namespace
         bool is_pointer() const
         {
             return m_is_pointer;
+        }
+
+        IProperty::flags get_flags() const
+        {
+            return m_flags;
         }
 
         py::object get(const py::object &instance, const py::object &owner)
@@ -890,13 +899,14 @@ namespace
         {
             const auto &type_system = object.get_type().get_type_system();
             const auto &type = type_system.get_type(get_type_name());
-            new PropertyT(object, get_name(), type, is_pointer());
+            new PropertyT(object, get_name(), type, is_pointer(), get_flags());
         }
         
     private:
         std::string m_name;
         std::string m_type_name;
         bool m_is_pointer;
+        IProperty::flags m_flags;
 
         PropertyT &get_property(const py::object &instance)
         {
@@ -904,7 +914,7 @@ namespace
             auto &properties = object->get_properties();
             auto &prop = properties.get_property(get_name());
 
-            // Cast the property to ClassT.
+            // Cast the property to PropertyT.
             return dynamic_cast<PropertyT &>(prop);
         }
     };
@@ -929,6 +939,9 @@ void bind_pclass(py::module &m)
         .value("PRIMITIVE", Type::Kind::PRIMITIVE)
         .value("CLASS", Type::Kind::CLASS)
         .value("ENUM", Type::Kind::ENUM);
+    py::enum_<IProperty::flags>(m, "PropertyFlags")
+        .value("NONE", IProperty::flags::NONE)
+        .value("PUBLIC", IProperty::flags::PUBLIC);
 
     py::class_<Type> type_cls(m, "Type");
     py::class_<Enum> enum_cls(m, "Enum");
@@ -1036,16 +1049,16 @@ void bind_pclass(py::module &m)
     }, py::return_value_policy::take_ownership, "hash"_a);
 
     // StaticPropertyDef Definitions
-    static_property_def_cls.def(py::init<const std::string &, const std::string &, bool>(),
-        "name"_a, "type_name"_a, "is_pointer"_a = false);
+    static_property_def_cls.def(py::init<const std::string &, const std::string &, const bool, IProperty::flags>(),
+        "name"_a, "type_name"_a, "is_pointer"_a = false, "flags"_a = IProperty::flags::NONE);
     static_property_def_cls.def("__get__", &StaticPropertyDef::get,
         py::return_value_policy::reference_internal);
     static_property_def_cls.def("__set__", &StaticPropertyDef::set);
     static_property_def_cls.def("instantiate", &StaticPropertyDef::instantiate);
 
     // VectorPropertyDef Definitions
-    vector_property_def_cls.def(py::init<const std::string &, const std::string &, bool>(),
-        "name"_a, "type_name"_a, "is_pointer"_a = false);
+    vector_property_def_cls.def(py::init<const std::string &, const std::string &, const bool, IProperty::flags>(),
+        "name"_a, "type_name"_a, "is_pointer"_a = false, "flags"_a = IProperty::flags::NONE);
     vector_property_def_cls.def("__get__", &VectorPropertyDef::get,
         py::return_value_policy::reference_internal);
     vector_property_def_cls.def("__set__", &VectorPropertyDef::set);
