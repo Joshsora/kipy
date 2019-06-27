@@ -11,8 +11,9 @@ class SerializedFile(object):
     BINARY_HEADER = b'BINd'
     JSON_HEADER = b'JSON'
 
-    def __init__(self, type_system, path, mode='rb'):
-        self.type_system = type_system
+    type_system = None
+
+    def __init__(self, path, mode='rb'):
         self.path = path
         self.mode = mode
 
@@ -60,10 +61,7 @@ class SerializedFile(object):
 
         # Force the WRITE_SERIALIZER_FLAGS flag so that the correct flags
         # can be loaded later.
-        # TODO: Why aren't pybind11 flags exporting properly?
-        flags = BinarySerializerFlags(
-            int(flags) | int(BinarySerializerFlags.WRITE_SERIALIZER_FLAGS)
-        )
+        flags |= BinarySerializerFlags.WRITE_SERIALIZER_FLAGS
 
         # Serialize the object.
         buffer = BitBuffer()

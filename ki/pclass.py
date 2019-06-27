@@ -1,17 +1,15 @@
 import copy
 
 from . import lib
-
-from .lib.serialization import BinarySerializer, BinarySerializerFlags
+from .lib.pclass import IHashCalculator, WizardHashCalculator, TypeSystem, \
+    PropertyFlags, StaticProperty, VectorProperty
+from .lib.serialization import BinarySerializer, BinarySerializerFlags, JsonSerializer
 from .lib.util import BitBuffer, BitStream
 
-from .lib.pclass import IHashCalculator, WizardHashCalculator, TypeSystem, \
-    StaticProperty, VectorProperty
-
 __all__ = [
-    'IHashCalculator', 'WizardHashCalculator', 'TypeSystem', 'StaticProperty',
-    'VectorProperty', 'PropertyClassMeta', 'PropertyClass', 'EnumMeta', 'Enum',
-    'EnumElement'
+    'IHashCalculator', 'WizardHashCalculator', 'TypeSystem', 'PropertyFlags',
+    'StaticProperty', 'VectorProperty', 'PropertyClassMeta', 'PropertyClass',
+    'EnumMeta', 'Enum', 'EnumElement'
 ]
 
 
@@ -78,6 +76,10 @@ class PropertyClass(lib.pclass.PropertyClass, metaclass=PropertyClassMeta):
         serializer = BinarySerializer(self._type_system, False, flags)
         serializer.save(self, stream)
         return buffer.data[:stream.tell().as_bytes()]
+
+    def serialize_json(self):
+        serializer = JsonSerializer(self._type_system, False)
+        return serializer.save(self)
 
 
 class EnumMeta(type):
