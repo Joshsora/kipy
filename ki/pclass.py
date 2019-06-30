@@ -3,7 +3,8 @@ import copy
 from . import lib
 from .lib.pclass import IHashCalculator, WizardHashCalculator, TypeSystem, \
     PropertyFlags, StaticProperty, VectorProperty
-from .lib.serialization import BinarySerializer, BinarySerializerFlags, JsonSerializer
+from .lib.serialization import BinarySerializer, BinarySerializerFlags, \
+    JsonSerializer, XmlSerializer
 from .lib.util import BitBuffer, BitStream
 
 __all__ = [
@@ -79,6 +80,10 @@ class PropertyClass(lib.pclass.PropertyClass, metaclass=PropertyClassMeta):
 
     def serialize_json(self):
         serializer = JsonSerializer(self._type_system, False)
+        return serializer.save(self)
+
+    def serialize_xml(self):
+        serializer = XmlSerializer(self._type_system)
         return serializer.save(self)
 
 

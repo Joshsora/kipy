@@ -2,6 +2,7 @@
 
 #include <ki/serialization/BinarySerializer.h>
 #include <ki/serialization/JsonSerializer.h>
+#include <ki/serialization/XmlSerializer.h>
 #include <ki/pclass/Type.h>
 #include <ki/pclass/TypeSystem.h>
 #include <ki/pclass/PropertyClass.h>
@@ -17,6 +18,7 @@ using ki::pclass::PropertyClass;
 
 using ki::serialization::BinarySerializer;
 using ki::serialization::JsonSerializer;
+using ki::serialization::XmlSerializer;
 
 namespace
 {
@@ -49,6 +51,7 @@ void bind_serialization(py::module &m)
     // Classes
     py::class_<BinarySerializer, PyBinarySerializer> binary_serializer_cls(m, "BinarySerializer");
     py::class_<JsonSerializer> json_serializer_cls(m, "JsonSerializer");
+    py::class_<XmlSerializer> xml_serializer_cls(m, "XmlSerializer");
 
     #define DEFINE_ENUM_OP(descr, op)                                                      \
         .def(descr, [](BinarySerializer::flags &self, BinarySerializer::flags &other)      \
@@ -122,4 +125,24 @@ void bind_serialization(py::module &m)
 
         return instance;
     }, py::return_value_policy::take_ownership, "json_string"_a);
+
+    // XmlSerializer Definitions
+    xml_serializer_cls.def(py::init<TypeSystem &>(), "type_system"_a);
+    xml_serializer_cls.def("save", &XmlSerializer::save, "object"_a);
+    xml_serializer_cls.def("load", [](XmlSerializer &self, const std::string &xml_string)
+    {
+        // Load the PropertyClass into our destination pointer.
+        std::unique_ptr<PropertyClass> dest = nullptr;
+        self.load(dest, xml_string);
+
+        // Cast it to its Python representation.
+        py::object instance = py::cast(dest.release());
+
+        // This object was just instantiated, and as such now has a
+        // reference count >= 2; decrement the reference count to avoid
+        // memory leaks.
+        instance.dec_ref();
+
+        return instance;
+    }, py::return_value_policy::take_ownership, "xml_string"_a);
 }

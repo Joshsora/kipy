@@ -323,6 +323,12 @@ namespace detail
             }
             catch (py::cast_error &e)
             {
+                auto *value_ptr = value.ptr();
+                if (PyObject_HasAttrString(value_ptr, "__str__"))
+                {
+                    return value.attr("__str__")().cast<std::string>();
+                }
+
                 return this->bad_cast();
             }
         }
@@ -972,7 +978,7 @@ void bind_pclass(py::module &m)
     });
     enum_cls.def("__str__", [](Enum &self)
     {
-        return self.get_type().get_name();
+        return std::to_string(self.get_value());
     });
     enum_cls.def("__int__", [](Enum &self)
     {
