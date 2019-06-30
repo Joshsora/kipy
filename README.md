@@ -24,7 +24,7 @@ kipy can also be installed in your local environment:
 #### Prerequisites
 ##### Version Requirements
 * Python 3.5.0+
-* CMake 3.1.0+
+* CMake 3.11.0+
 * C++11 supported compiler
 
 ##### Initialize Submodules
