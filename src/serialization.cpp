@@ -92,7 +92,22 @@ void bind_serialization(py::module &m)
 
         // Load the PropertyClass into our destination pointer.
         std::unique_ptr<PropertyClass> dest = nullptr;
-        self.load(dest, stream, size);
+        try
+        {
+            self.load(dest, stream, size);
+        }
+        catch (std::runtime_error &e)
+        {
+            if (dest)
+            {
+                // This object was just instantiated, and as such now has a
+                // reference count >= 2; decrement the reference count to avoid
+                // memory leaks.
+                py::cast(dest.release()).dec_ref();
+            }
+
+            throw;
+        }
 
         // Cast it to its Python representation.
         py::object instance = py::cast(dest.release());
@@ -113,7 +128,22 @@ void bind_serialization(py::module &m)
     {
         // Load the PropertyClass into our destination pointer.
         std::unique_ptr<PropertyClass> dest = nullptr;
-        self.load(dest, json_string);
+        try
+        {
+            self.load(dest, json_string);
+        }
+        catch (std::runtime_error &e)
+        {
+            if (dest)
+            {
+                // This object was just instantiated, and as such now has a
+                // reference count >= 2; decrement the reference count to avoid
+                // memory leaks.
+                py::cast(dest.release()).dec_ref();
+            }
+
+            throw;
+        }
 
         // Cast it to its Python representation.
         py::object instance = py::cast(dest.release());
@@ -133,7 +163,22 @@ void bind_serialization(py::module &m)
     {
         // Load the PropertyClass into our destination pointer.
         std::unique_ptr<PropertyClass> dest = nullptr;
-        self.load(dest, xml_string);
+        try
+        {
+            self.load(dest, xml_string);
+        }
+        catch (std::runtime_error &e)
+        {
+            if (dest)
+            {
+                // This object was just instantiated, and as such now has a
+                // reference count >= 2; decrement the reference count to avoid
+                // memory leaks.
+                py::cast(dest.release()).dec_ref();
+            }
+
+            throw;
+        }
 
         // Cast it to its Python representation.
         py::object instance = py::cast(dest.release());
