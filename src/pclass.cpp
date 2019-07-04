@@ -50,6 +50,7 @@ using ki::pclass::IProperty;
 using ki::pclass::Value;
 using ki::pclass::ValueCaster;
 using ki::pclass::Enum;
+using ki::pclass::enum_value_t;
 using ki::pclass::Type;
 using ki::pclass::EnumType;
 using ki::pclass::WizardHashCalculator;
@@ -575,6 +576,9 @@ namespace
 
         // Declare py::object <--> nlohmann::json value caster.
         DECLARE_VALUE_CASTER(nlohmann::json);
+
+        // Declare Enum -> enum_value_t value caster.
+        ValueCaster::declare<Enum, enum_value_t>();
     }
 
     void PyTypeSystem::define_class(const std::string &name, const py::object &cls, const Type *base_class)
@@ -631,23 +635,31 @@ namespace
         {
             if (index < 0 || index >= get_element_count())
                 throw std::runtime_error("Index out of bounds.");
-            return Value::make_reference(m_value);
+
+            auto value = Value::make_reference(m_value);
+
+            // Primitives need to be casted to the correct type.
+            if (get_type().get_kind() == Type::Kind::PRIMITIVE)
+                value = get_type().cast(value);
+
+            return value;
         }
 
         void set_value(Value value, const std::size_t index) override
         {
             if (index < 0 || index >= get_element_count())
                 throw std::runtime_error("Index out of bounds.");
-            m_value = value.as<py::object>().get<py::object>();
 
             // Is this an enum?
             if (get_type().get_kind() == Type::Kind::ENUM)
             {
-                // Are we trying to set the value using an integer?
-                if (py::int_(m_value, true).check())
-                {
-                    m_value = py::cast(Enum(get_type(), m_value.cast<unsigned int>()));
-                }
+                auto enum_value = value.as<enum_value_t>().get<enum_value_t>();
+                m_value = py::cast(Enum(get_type(), enum_value));
+            }
+            else
+            {
+                auto casted_value = get_type().cast(value);
+                m_value = casted_value.as<py::object>().get<py::object>();
             }
         }
 
@@ -754,14 +766,32 @@ namespace
         {
             if (index < 0 || index >= get_element_count())
                 throw std::runtime_error("Index out of bounds.");
-            return Value::make_value(py::object(m_list[index]));
+
+            auto value = Value::make_value(py::object(m_list[index]));
+
+            // Primitives need to be casted to the correct type.
+            if (get_type().get_kind() == Type::Kind::PRIMITIVE)
+                value = get_type().cast(value);
+
+            return value;
         }
 
         void set_value(Value value, const std::size_t index) override
         {
             if (index < 0 || index >= get_element_count())
                 throw std::runtime_error("Index out of bounds.");
-            m_list[index] = value.as<py::object>().get<py::object>();
+
+            // Is this an enum?
+            if (get_type().get_kind() == Type::Kind::ENUM)
+            {
+                auto enum_value = value.as<enum_value_t>().get<enum_value_t>();
+                m_list[index] = py::cast(Enum(get_type(), enum_value));
+            }
+            else
+            {
+                auto casted_value = get_type().cast(value);
+                m_list[index] = casted_value.as<py::object>().get<py::object>();
+            }
         }
 
         const PropertyClass *get_object(const std::size_t index) const override
