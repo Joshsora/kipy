@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.11)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /bigobj")
 
 set(KI_BUILD_EXAMPLES OFF CACHE BOOL "Determines whether to build examples." FORCE)
 set(KI_BUILD_TESTS OFF CACHE BOOL "Determines whether to build tests." FORCE)
