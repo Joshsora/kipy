@@ -650,16 +650,17 @@ namespace
             if (index < 0 || index >= get_element_count())
                 throw std::runtime_error("Index out of bounds.");
 
-            // Is this an enum?
-            if (get_type().get_kind() == Type::Kind::ENUM)
+            const auto &kind = get_type().get_kind();
+            if (kind == Type::Kind::ENUM)
             {
                 auto enum_value = value.as<enum_value_t>().get<enum_value_t>();
                 m_value = py::cast(Enum(get_type(), enum_value));
             }
             else
             {
-                auto casted_value = get_type().cast(value);
-                m_value = casted_value.as<py::object>().get<py::object>();
+                if (kind == Type::Kind::PRIMITIVE)
+                    value = get_type().cast(value);
+                m_value = value.as<py::object>().get<py::object>();
             }
         }
 
@@ -781,16 +782,17 @@ namespace
             if (index < 0 || index >= get_element_count())
                 throw std::runtime_error("Index out of bounds.");
 
-            // Is this an enum?
-            if (get_type().get_kind() == Type::Kind::ENUM)
+            const auto &kind = get_type().get_kind();
+            if (kind == Type::Kind::ENUM)
             {
                 auto enum_value = value.as<enum_value_t>().get<enum_value_t>();
                 m_list[index] = py::cast(Enum(get_type(), enum_value));
             }
             else
             {
-                auto casted_value = get_type().cast(value);
-                m_list[index] = casted_value.as<py::object>().get<py::object>();
+                if (kind == Type::Kind::PRIMITIVE)
+                    value = get_type().cast(value);
+                m_list[index] = value.as<py::object>().get<py::object>();
             }
         }
 
